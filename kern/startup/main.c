@@ -96,6 +96,7 @@ boot(void)
 	 * dev/generic/console.c).
 	 */
 
+	DEBUG(DB_EXEC, "Entered boot()");
 	kprintf("\n");
 	kprintf("OS/161 base system version %s\n", BASE_VERSION);
 	kprintf("%s", harvard_copyright);
@@ -107,14 +108,19 @@ boot(void)
 
 	/* Early initialization. */
 	ram_bootstrap();
+	DEBUG(DB_LOCORE, "Finished ram bootstrapping");
 	thread_bootstrap();
+	DEBUG(DB_THREADS, "Finished thread bootstrapping");
 	hardclock_bootstrap();
+	DEBUG(DB_LOCORE, "Finished hardclock bootstrapping");
 	vfs_bootstrap();
+	DEBUG(DB_VFS, "Finished vfs bootstrapping");
 
 	/* Probe and initialize devices. Interrupts should come on. */
 	kprintf("Device probe...\n");
 	KASSERT(curthread->t_curspl > 0);
 	mainbus_bootstrap();
+	DEBUG(DB_LOCORE, "Finished mainbus bootstrapping");
 	KASSERT(curthread->t_curspl == 0);
 	/* Now do pseudo-devices. */
 	pseudoconfig();
@@ -147,7 +153,9 @@ shutdown(void)
 	kprintf("Shutting down.\n");
 	
 	vfs_clearbootfs();
+	DEBUG(DB_VFS, "Finished vfs clearboot");
 	vfs_clearcurdir();
+	DEBUG(DB_VFS, "Finished vfs clearcurdir");
 	vfs_unmountall();
 
 	thread_shutdown();
@@ -167,6 +175,7 @@ shutdown(void)
 int
 sys_reboot(int code)
 {
+	DEBUG(DB_EXEC, "Entered sys_reboot()");	
 	switch (code) {
 	    case RB_REBOOT:
 	    case RB_HALT:
@@ -205,6 +214,8 @@ void
 kmain(char *arguments)
 {
 	boot();
+	
+	DEBUG(DB_EXEC, "Finished boot()");
 
 	menu(arguments);
 
