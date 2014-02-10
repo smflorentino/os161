@@ -102,7 +102,7 @@ boot(void)
 	kprintf("%s", harvard_copyright);
 	kprintf("\n");
 
-	kprintf("scottflo and cjowen system version %s (%s #%d)\n", 
+	kprintf("scottflo@buffalo.edu and cjowen@buffalo.edu system version %s (%s #%d)\n", 
 		GROUP_VERSION, buildconfig, buildversion);
 	kprintf("\n");
 
@@ -141,7 +141,7 @@ boot(void)
 	COMPILE_ASSERT(sizeof(userptr_t) == sizeof(char *));
 	COMPILE_ASSERT(sizeof(*(userptr_t)0) == sizeof(char));
 
-	kprintf("\nscottflo cjowen\n");
+	//kprintf("\nscottflo cjowen\n");
 }
 
 /*
@@ -217,7 +217,7 @@ kmain(char *arguments)
 {
 	boot();
 	
-	kprintf("scottflo cjowen\n");
+	//kprintf("scottflo cjowen\n");
 	
 	DEBUG(DB_EXEC, "Finished boot()");
 
