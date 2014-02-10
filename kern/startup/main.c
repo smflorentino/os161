@@ -141,7 +141,7 @@ boot(void)
 	COMPILE_ASSERT(sizeof(userptr_t) == sizeof(char *));
 	COMPILE_ASSERT(sizeof(*(userptr_t)0) == sizeof(char));
 
-	kprint("scottflo cjowen\n");
+	kprintf("\nscottflo cjowen\n");
 }
 
 /*
@@ -217,7 +217,7 @@ kmain(char *arguments)
 {
 	boot();
 	
-	kprint("scottflo cjowen\n");
+	kprintf("scottflo cjowen\n");
 	
 	DEBUG(DB_EXEC, "Finished boot()");
 
