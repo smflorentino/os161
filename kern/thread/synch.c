@@ -87,6 +87,8 @@ sem_destroy(struct semaphore *sem)
         kfree(sem);
 }
 
+//decrement (lock)
+
 void 
 P(struct semaphore *sem)
 {
@@ -129,6 +131,8 @@ P(struct semaphore *sem)
 	spinlock_release(&sem->sem_lock);
 }
 
+//increment (unlock)
+
 void
 V(struct semaphore *sem)
 {
@@ -162,47 +166,117 @@ lock_create(const char *name)
                 kfree(lock);
                 return NULL;
         }
+
+        //Initialize Lock Wait Channel
+        lock->lk_wchan = wchan_create(lock->lk_name);
+        if(lock->lk_wchan == NULL) {
+            kfree(lock->lk_name);
+            kfree(lock);
+            return NULL;
+        }
+
+
+        //Lock is initially unlocked
+        lock->lk_locked = false;
+
+        //Initialize Lock Spinlock
+        spinlock_init(&lock->lk_spinlock);
         
         // add stuff here as needed
         
         return lock;
 }
 
+//Need not be atomic
 void
 lock_destroy(struct lock *lock)
 {
         KASSERT(lock != NULL);
+        KASSERT(lock->lk_locked == false);
 
-        // add stuff here as needed
-        
+        //Clean up the lock.
+        spinlock_cleanup(&lock->lk_spinlock);
+        //Clean up the wait channel (asserts if pending threads are present)
+        wchan_destroy(lock->lk_wchan);
+        //Clean up data structures
         kfree(lock->lk_name);
         kfree(lock);
 }
 
+//ATOMIC
 void
 lock_acquire(struct lock *lock)
 {
-        // Write this
+        KASSERT(lock != NULL);
+        KASSERT(curthread != NULL);
 
-        (void)lock;  // suppress warning until code gets written
+        //Ensure this operation is atomic
+        spinlock_acquire(&lock->lk_spinlock);
+        
+        while(lock->lk_locked)
+        {
+            /*
+                Lock the wait channel,
+                just in case someone else is trying to
+                acquire the lock at the same time
+            */
+            wchan_lock(lock->lk_wchan);
+            //After locking the Channel, release the spinlock and then sleep.
+            spinlock_release(&lock->lk_spinlock);
+            wchan_sleep(lock->lk_wchan);
+            //When we wake up, get the spinlock again so we can properly set lock bit.
+            spinlock_acquire(&lock->lk_spinlock);
+        }
+            //Sanity Check - Make sure we're unlocked.
+            KASSERT(lock->lk_locked == false);
+            //Lock the lock!
+            lock->lk_locked = true;
+            lock->lk_owner = curthread;
+            //Now, release the spinlock.
+            spinlock_release(&lock->lk_spinlock);
 }
 
+//ATOMIC
 void
 lock_release(struct lock *lock)
 {
-        // Write this
+        KASSERT(lock != NULL);
+        KASSERT(curthread != NULL);
 
-        (void)lock;  // suppress warning until code gets written
+        //Ensure this operation is atomic.
+        spinlock_acquire(&lock->lk_spinlock);
+        
+        //Ensure we are actually locked.
+        KASSERT(lock->lk_locked == true);
+        //Ensure the owner of the lock is requesting an unlock, and no one else.
+        KASSERT(lock->lk_owner == curthread);
+        //Unlock the lock.
+        lock->lk_locked = false;
+        lock->lk_owner = NULL;
+        //Notify those waiting for the lock.
+        wchan_wakeone(lock->lk_wchan);
+        //End of Atomic Operation.
+        spinlock_release(&lock->lk_spinlock);
 }
 
+//ATOMIC
 bool
 lock_do_i_hold(struct lock *lock)
 {
-        // Write this
+        KASSERT(lock != NULL);
+        KASSERT(curthread != NULL);
 
-        (void)lock;  // suppress warning until code gets written
+        //Ensure this operation is atomic
+        spinlock_acquire(&lock->lk_spinlock);
 
-        return true; // dummy until code gets written
+        //Check if we are the thread that locked this lock.
+        bool result = (curthread == lock->lk_owner);
+
+        //End Atomic Operation
+        spinlock_release(&lock->lk_spinlock);
+
+        //Return our result
+        return result;
 }
 
 ////////////////////////////////////////////////////////////
