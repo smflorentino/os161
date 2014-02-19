@@ -116,6 +116,9 @@ void lock_destroy(struct lock *);
 
 struct cv {
         char *cv_name;
+        struct lock *cv_intlock;
+        struct wchan *cv_wchan;
+        /*volatile*/ struct lock *sup_lock;
         // add what you need here
         // (don't forget to mark things volatile as needed)
 };

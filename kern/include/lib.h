@@ -59,7 +59,7 @@
  */
 #include "opt-noasserts.h"
 
-#if OPT_NOASSERTS
+#if 0/*OPT_NOASSERTS*/
 #define KASSERT(expr) ((void)(expr))
 #else
 #define KASSERT(expr) \
@@ -88,6 +88,8 @@
 #define DB_NET         0x200
 #define DB_NETFS       0x400
 #define DB_KMALLOC     0x800
+
+#define DB_CV		   0x1000
 
 extern uint32_t dbflags;
 
