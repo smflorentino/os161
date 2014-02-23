@@ -1,4 +1,4 @@
-/*
+                                                                                                                                               /*
  * Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
  *	The President and Fellows of Harvard College.
  *
@@ -118,9 +118,7 @@ struct cv {
         char *cv_name;
         struct lock *cv_intlock;
         struct wchan *cv_wchan;
-        /*volatile*/ struct lock *sup_lock;
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
+        struct lock *sup_lock;
 };
 
 struct cv *cv_create(const char *name);
@@ -149,6 +147,14 @@ void cv_broadcast(struct cv *cv, struct lock *lock);
 
 struct rwlock {
         char *rwlock_name;
+        struct lock *rwlock_intlock;
+        struct wchan *rwlock_rch;
+        struct wchan *rwlock_wch;
+
+        struct thread *rwlock_writer;
+
+        volatile int readers;
+        volatile int writers;
 };
 
 struct rwlock * rwlock_create(const char *);

@@ -390,8 +390,166 @@ cv_broadcast(struct cv *cv, struct lock *lock)
         //Ensure we have the lock.
         KASSERT(cv->sup_lock == lock);
         KASSERT(lock_do_i_hold(lock));
-        //We're sure we have the lock. Now wake up a thread.
+        //We're sure we have the lock. Now wake up all threadsi
         wchan_wakeall(cv->cv_wchan);
         //End Atomic Operation
         lock_release(cv->cv_intlock);
+}
+
+////////////////////////////////////////////////////////////
+//
+// Reader-Writer Lock
+
+struct rwlock *
+rwlock_create(const char *name)
+{
+        struct rwlock *rwlock;
+
+        rwlock = kmalloc(sizeof(struct rwlock));
+        if (rwlock == NULL) {
+            return NULL;
+        }
+
+        rwlock->rwlock_name = kstrdup(name);
+        if(rwlock->rwlock_name == NULL)
+        {
+            kfree(rwlock);
+            return NULL;
+        }
+
+        //Initialize Reader WChan
+        rwlock->rwlock_rch = wchan_create(rwlock->rwlock_name);
+            if(rwlock->rwlock_rch == NULL) {
+            kfree(rwlock->rwlock_name);
+            kfree(rwlock);
+            return NULL;
+        };
+
+        //Initialize Writer WChan
+        rwlock->rwlock_wch = wchan_create(rwlock->rwlock_name);
+            if(rwlock->rwlock_wch == NULL) {
+            wchan_destroy(rwlock->rwlock_rch);
+            kfree(rwlock->rwlock_name);
+            kfree(rwlock);
+            return NULL;
+        };
+
+        //Initialize RWL Internal Lock
+        rwlock->rwlock_intlock = lock_create(rwlock->rwlock_name);
+        if(rwlock->rwlock_intlock == NULL)
+        {
+            wchan_destroy(rwlock->rwlock_rch);
+            wchan_destroy(rwlock->rwlock_wch);
+            lock_destroy(rwlock->rwlock_intlock);
+            kfree(rwlock->rwlock_name);
+            kfree(rwlock);
+            return NULL;   
+        }
+
+        rwlock->readers = 0;
+        rwlock->writers = 0;
+
+        return rwlock;
+}
+
+//Need not be atomic?
+void
+rwlock_destroy(struct rwlock *rwlock)
+{
+    KASSERT(rwlock != NULL);
+
+    lock_destroy(rwlock->rwlock_intlock);
+
+    //Clean up internal data
+    wchan_destroy(rwlock->rwlock_rch);
+    wchan_destroy(rwlock->rwlock_wch);
+    kfree(rwlock->rwlock_name);
+    kfree(rwlock);
+}
+
+//ATOMIC(?)
+
+void 
+rwlock_acquire_read(struct rwlock *rwlock)
+{
+    KASSERT(rwlock != NULL);
+    //Ensure this operation is atomic
+    lock_acquire(rwlock->rwlock_intlock);
+    //See if there are active or pending writers. If so, wait.
+    while(rwlock->rwlock_writer != NULL || rwlock->writers != 0)
+    {
+        //Lock the wait channel, so we can sleep before someone else wakes up.
+        wchan_lock(rwlock->rwlock_rch);
+        lock_release(rwlock->rwlock_intlock);
+        wchan_sleep(rwlock->rwlock_rch);
+        //When we wake up, continue atomic operation
+        lock_acquire(rwlock->rwlock_intlock);
+    }
+    //Begin Read Lock
+    rwlock->readers++;
+
+    //End Atomic Operation
+    lock_release(rwlock->rwlock_intlock);
+
+}
+
+//ATOMIC(?)
+void
+rwlock_release_read(struct rwlock *rwlock)
+{
+    KASSERT(rwlock != NULL);
+    //Ensure this operation is atomic
+    lock_acquire(rwlock->rwlock_intlock);
+    //Decrement the reader count
+    rwlock->readers--;
+    //If we were the last reader, release a writer if one exists:
+    if(rwlock->readers == 0 && rwlock->writers > 0)
+    {
+        wchan_wakeone(rwlock->rwlock_wch);
+    }
+    //End Atomic Operation
+    lock_release(rwlock->rwlock_intlock);
+}
+
+//ATOMIC(?)
+void
+rwlock_acquire_write(struct rwlock *rwlock)
+{
+    KASSERT(rwlock != NULL);
+    //Ensure this operation is atomic
+    lock_acquire(rwlock->rwlock_intlock);
+    rwlock->writers++;
+    //See if there are any readers or a writer; if so, wait.
+    while(rwlock->readers > 0 || rwlock->rwlock_writer != NULL)
+    {
+        //Lock the wait channel, so we can sleep before someone else wakes up.
+        wchan_lock(rwlock->rwlock_wch);
+        lock_release(rwlock->rwlock_intlock);
+        wchan_sleep(rwlock->rwlock_wch);
+        //When we wake up, continue atomic operation
+        lock_acquire(rwlock->rwlock_intlock);
+    }
+    rwlock->writers--;
+    rwlock->rwlock_writer=curthread;
+
+    //End Atomic Operation
+    lock_release(rwlock->rwlock_intlock);
+}
+
+//ATOMIC(?)
+void
+rwlock_release_write(struct rwlock *rwlock)
+{
+    KASSERT(rwlock != NULL);
+    //Ensure this operation is atomic (shouldn't have to be, but this is in case someone misbehaves)
+    lock_acquire(rwlock->rwlock_intlock);
+    //Ensure we actually hold this lock
+    KASSERT(rwlock->rwlock_writer == curthread);
+    //Unlock it
+    rwlock->rwlock_writer = NULL;
+    //Release the readers:
+    wchan_wakeall(rwlock->rwlock_rch);
+    wchan_wakeone(rwlock->rwlock_wch);
+    //End Atomic Operation
+    lock_release(rwlock->rwlock_intlock);
 }

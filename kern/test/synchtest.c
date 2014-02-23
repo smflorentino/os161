@@ -50,6 +50,8 @@ static struct semaphore *testsem;
 static struct lock *testlock;
 static struct cv *testcv;
 static struct semaphore *donesem;
+static struct rwlock *rwlock;
+static int numThreads = 40;
 
 static
 void
@@ -77,6 +79,12 @@ inititems(void)
 		donesem = sem_create("donesem", 0);
 		if (donesem == NULL) {
 			panic("synchtest: sem_create failed\n");
+		}
+	}
+	if(rwlock == NULL) {
+		rwlock = rwlock_create("rwlock");
+		if(rwlock == NULL) {
+			panic("synchtest: rwlock_create failed\n");
 		}
 	}
 }
@@ -349,11 +357,110 @@ cvtest2(int nargs, char **args)
 			      strerror(result));
 		}
 	}
-	for (i=0; i<NTHREADS; i++) {
+	for (int j=0; j<numThreads; j++) {
 		P(donesem);
 	}
 
 	kprintf("CV test done\n");
+
+	return 0;
+}
+
+static
+void
+rwlocktest1thread(void *junk, unsigned long num)
+{
+	(void)junk;
+	(void)num;
+	rwlock_acquire_read(rwlock);
+	kprintf("Thread %lur Acquiring Read\n",num);
+	thread_yield();
+	kprintf("Thread %lur Releasing Read\n", num);
+	rwlock_release_read(rwlock);
+	V(donesem);
+}
+
+static
+void
+rwlocktest2thread(void *junk, unsigned long num)
+{
+	(void)junk;
+	kprintf("Thread %luw Acquiring Write...",num);
+	rwlock_acquire_write(rwlock);
+	kprintf("%luw Done\n",num);
+	thread_yield();
+	kprintf("Thread %luw Releasing Write...", num);
+	rwlock_release_write(rwlock);
+	kprintf("%luw Done\n",num);
+	V(donesem);
+}
+
+int
+rwlocktest(int nargs, char **args)
+{
+	(void)nargs;
+	(void)args;
+	inititems();
+	//rwlocktest1(nargs, args);
+	rwlocktest2(nargs, args);
+	kprintf("RWL Test Done.\n");
+
+	return 0;
+}
+
+int
+rwlocktest1(int nargs, char **args)
+{
+	kprintf("Starting RWL Test 1...\n");
+	(void) nargs;
+	(void) args;
+
+	int result;
+
+	for(int i=0;i<numThreads;i++)
+	{
+		result = thread_fork("synchtest", rwlocktest1thread, NULL, i ,NULL);
+		if (result) {
+			panic("rwlocktest1: thread_fork failed: %s\n",
+			      strerror(result));
+		}
+	}
+
+	for (int i=0; i<numThreads; i++) {
+		P(donesem);
+	}
+
+
+	return 0;
+}
+
+int
+rwlocktest2(int nargs, char **args)
+{
+	kprintf("Starting RWL Test 2...\n");
+	(void) nargs;
+	(void) args;
+
+	int result;
+
+	for(int i=0;i<numThreads;i++)
+	{
+		result = thread_fork("synchtest", rwlocktest1thread, NULL, i ,NULL);
+		if (result) {
+			panic("rwlocktest2: thread_fork failed: %s\n",
+			      strerror(result));
+		}
+		result = thread_fork("synchtest", rwlocktest2thread, NULL, i ,NULL);
+		if (result) {
+			panic("rwlocktest2: thread_fork failed: %s\n",
+			      strerror(result));
+		}
+	}
+
+	for (int i=0; i<numThreads * 2; i++) {
+		P(donesem);
+	}
+
 
 	return 0;
 }
