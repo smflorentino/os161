@@ -60,7 +60,7 @@ inline void matchmaker_end(void) {
  * order or timing of threads launched by our testing suite.
  */
 
-#define NMATING 10
+#define NMATING 5
 
 struct semaphore * whalematingMenuSemaphore;
 

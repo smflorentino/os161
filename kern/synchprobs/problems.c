@@ -51,32 +51,24 @@ static volatile int males = 0;
 static volatile int females = 0;
 static struct lock *wm_lock;
 
-static struct lock *wm_mlock;
-static struct lock *wm_flock;
-static struct lock *wm_mmlock;
+// static struct lock *wm_mlock;
+// static struct lock *wm_flock;
+// static struct lock *wm_mmlock;
 
 static struct cv *wm_mcv;
 static struct cv *wm_fcv;
 static struct cv *wm_mmcv;
 
-static struct semaphore *wm_msem;
-static struct semaphore *wm_fsem;
-static struct semaphore *wm_mmsem;
-
 void whalemating_init() {
   wm_lock = lock_create("whales");
 
-  wm_mlock = lock_create("males");
-  wm_flock = lock_create("females");
-  wm_mmlock = lock_create("matchmakers");
+  // wm_mlock = lock_create("males");
+  // wm_flock = lock_create("females");
+  // wm_mmlock = lock_create("matchmakers");
 
   wm_mcv = cv_create("males");
   wm_fcv = cv_create("females");
   wm_mmcv = cv_create("matchmakers");
-
-  wm_msem = sem_create("males",0);
-  wm_fsem = sem_create("females",0);
-  wm_mmsem = sem_create("matchmaters",0);
 }
 
 // 20 Feb 2012 : GWA : Adding at the suggestion of Nikhil Londhe. We don't
@@ -97,10 +89,12 @@ male(void *p, unsigned long which)
   (void)which;
   
   male_start();
+  kprintf("SStarting Male %lu\n",which);
   lock_acquire(wm_lock);
   males++;
   cv_signal(wm_mmcv,wm_lock);
   cv_wait(wm_mcv,wm_lock);
+  kprintf("Releasing Male");
   lock_release(wm_lock);
   male_end();
 
@@ -117,10 +111,12 @@ female(void *p, unsigned long which)
   (void)which;
   
   female_start();
+  kprintf("SStarting Female %lu\n",which);
   lock_acquire(wm_lock);
   females++;
   cv_signal(wm_mmcv,wm_lock);
   cv_wait(wm_mcv,wm_lock);
+  kprintf("Releasing Female");
   lock_release(wm_lock);
   female_end();
   
@@ -144,6 +140,7 @@ matchmaker(void *p, unsigned long which)
     lock_acquire(wm_lock);
     if(males > 0 && females > 0)
     {
+      kprintf("Ready to match!");
       break;
     }
   }
