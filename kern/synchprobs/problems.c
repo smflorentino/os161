@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2001, 2002, 2009
- *	The President and Fellows of Harvard College.
+ *  The President and Fellows of Harvard College.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -47,25 +47,61 @@
 // functions will allow you to do local initialization. They are called at
 // the top of the corresponding driver code.
 
+static volatile int males = 0;
+static volatile int females = 0;
+static struct lock *wm_lock;
+
+static struct lock *wm_mlock;
+static struct lock *wm_flock;
+static struct lock *wm_mmlock;
+
+static struct cv *wm_mcv;
+static struct cv *wm_fcv;
+static struct cv *wm_mmcv;
+
+static struct semaphore *wm_msem;
+static struct semaphore *wm_fsem;
+static struct semaphore *wm_mmsem;
+
 void whalemating_init() {
-  return;
+  wm_lock = lock_create("whales");
+
+  wm_mlock = lock_create("males");
+  wm_flock = lock_create("females");
+  wm_mmlock = lock_create("matchmakers");
+
+  wm_mcv = cv_create("males");
+  wm_fcv = cv_create("females");
+  wm_mmcv = cv_create("matchmakers");
+
+  wm_msem = sem_create("males",0);
+  wm_fsem = sem_create("females",0);
+  wm_mmsem = sem_create("matchmaters",0);
 }
 
 // 20 Feb 2012 : GWA : Adding at the suggestion of Nikhil Londhe. We don't
 // care if your problems leak memory, but if you do, use this to clean up.
 
 void whalemating_cleanup() {
+  lock_destroy(wm_lock);
+  cv_destroy(wm_mcv);
+  cv_destroy(wm_fcv);
+  cv_destroy(wm_mmcv);
   return;
 }
 
 void
 male(void *p, unsigned long which)
 {
-	struct semaphore * whalematingMenuSemaphore = (struct semaphore *)p;
+  struct semaphore * whalematingMenuSemaphore = (struct semaphore *)p;
   (void)which;
   
   male_start();
-	// Implement this function 
+  lock_acquire(wm_lock);
+  males++;
+  cv_signal(wm_mmcv,wm_lock);
+  cv_wait(wm_mcv,wm_lock);
+  lock_release(wm_lock);
   male_end();
 
   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
@@ -77,11 +113,15 @@ male(void *p, unsigned long which)
 void
 female(void *p, unsigned long which)
 {
-	struct semaphore * whalematingMenuSemaphore = (struct semaphore *)p;
+  struct semaphore * whalematingMenuSemaphore = (struct semaphore *)p;
   (void)which;
   
   female_start();
-	// Implement this function 
+  lock_acquire(wm_lock);
+  females++;
+  cv_signal(wm_mmcv,wm_lock);
+  cv_wait(wm_mcv,wm_lock);
+  lock_release(wm_lock);
   female_end();
   
   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
@@ -93,11 +133,25 @@ female(void *p, unsigned long which)
 void
 matchmaker(void *p, unsigned long which)
 {
-	struct semaphore * whalematingMenuSemaphore = (struct semaphore *)p;
+  struct semaphore * whalematingMenuSemaphore = (struct semaphore *)p;
   (void)which;
   
   matchmaker_start();
-	// Implement this function 
+  lock_acquire(wm_lock);
+  while(1)
+  {
+    cv_wait(wm_mmcv,wm_lock);
+    lock_acquire(wm_lock);
+    if(males > 0 && females > 0)
+    {
+      break;
+    }
+  }
+  cv_signal(wm_mcv,wm_lock);
+  cv_signal(wm_fcv,wm_lock);
+  males--;
+  females--;
+  lock_release(wm_lock);
   matchmaker_end();
   
   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
@@ -151,7 +205,7 @@ void stoplight_cleanup() {
 void
 gostraight(void *p, unsigned long direction)
 {
-	struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
+  struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
   (void)direction;
   
   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
@@ -163,7 +217,7 @@ gostraight(void *p, unsigned long direction)
 void
 turnleft(void *p, unsigned long direction)
 {
-	struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
+  struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
   (void)direction;
   
   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
@@ -175,7 +229,7 @@ turnleft(void *p, unsigned long direction)
 void
 turnright(void *p, unsigned long direction)
 {
-	struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
+  struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
   (void)direction;
 
   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your

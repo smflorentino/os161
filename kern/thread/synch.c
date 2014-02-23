@@ -369,6 +369,10 @@ cv_signal(struct cv *cv, struct lock *lock)
         KASSERT(cv != NULL);
         //Ensure this operation is atomic
         lock_acquire(cv->cv_intlock);
+                if(cv->sup_lock == NULL)
+        {
+            cv->sup_lock = lock;
+        }
         KASSERT(cv->sup_lock != NULL);
         //Ensure we have the lock.
         KASSERT(cv->sup_lock == lock);
@@ -386,6 +390,10 @@ cv_broadcast(struct cv *cv, struct lock *lock)
 
         //Ensure this operation is atomic
         lock_acquire(cv->cv_intlock);
+                if(cv->sup_lock == NULL)
+        {
+            cv->sup_lock = lock;
+        }
         KASSERT(cv->sup_lock != NULL);
         //Ensure we have the lock.
         KASSERT(cv->sup_lock == lock);
@@ -466,8 +474,6 @@ rwlock_destroy(struct rwlock *rwlock)
     kfree(rwlock->rwlock_name);
     kfree(rwlock);
 }
-
-//ATOMIC(?)
 
 void 
 rwlock_acquire_read(struct rwlock *rwlock)
@@ -552,4 +558,4 @@ rwlock_release_write(struct rwlock *rwlock)
     wchan_wakeone(rwlock->rwlock_wch);
     //End Atomic Operation
     lock_release(rwlock->rwlock_intlock);
-}
+ }

@@ -41,7 +41,7 @@
 #define NSEMLOOPS     63
 #define NLOCKLOOPS    120
 #define NCVLOOPS      5
-#define NTHREADS      32
+#define NTHREADS      5
 
 static volatile unsigned long testval1;
 static volatile unsigned long testval2;
@@ -357,7 +357,7 @@ cvtest2(int nargs, char **args)
 			      strerror(result));
 		}
 	}
-	for (int j=0; j<numThreads; j++) {
+	for (int j=0; j<NTHREADS; j++) {
 		P(donesem);
 	}
 
