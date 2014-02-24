@@ -51,20 +51,16 @@ static volatile int males = 0;
 static volatile int females = 0;
 static struct lock *wm_lock;
 
-// static struct lock *wm_mlock;
-// static struct lock *wm_flock;
-// static struct lock *wm_mmlock;
-
 static struct cv *wm_mcv;
 static struct cv *wm_fcv;
 static struct cv *wm_mmcv;
 
+static struct semaphore *inter_sem;
+
+static struct lock *locks[4];
+
 void whalemating_init() {
   wm_lock = lock_create("whales");
-
-  // wm_mlock = lock_create("males");
-  // wm_flock = lock_create("females");
-  // wm_mmlock = lock_create("matchmakers");
 
   wm_mcv = cv_create("males");
   wm_fcv = cv_create("females");
@@ -189,7 +185,12 @@ matchmaker(void *p, unsigned long which)
 // the top of the corresponding driver code.
 
 void stoplight_init() {
-  return;
+    locks[0] = lock_create("q0 lock");
+    locks[1] = lock_create("q1 lock");
+    locks[2] = lock_create("q2 lock");
+    locks[3] = lock_create("q3 lock");
+
+    inter_sem = sem_create("inter sem",3); 
 }
 
 // 20 Feb 2012 : GWA : Adding at the suggestion of Nikhil Londhe. We don't
@@ -203,7 +204,24 @@ void
 gostraight(void *p, unsigned long direction)
 {
   struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
-  (void)direction;
+
+  //Enter intersection
+  P(inter_sem);
+  int firstQuad = direction;
+  int secondQuad = (direction + 3) % 4;
+  //Try to enter X
+  lock_acquire(locks[firstQuad]);
+  //Enter X
+  inQuadrant(firstQuad);
+  //Try to enter (X+3) % 4
+  lock_acquire(locks[secondQuad]);
+  //Leave X, enter (x+3) % 4
+  inQuadrant(secondQuad);
+  lock_release(locks[firstQuad]);
+  //Leave (x+3) % 4 (thereby leaving the intersection)
+  leaveIntersection();
+  lock_release(locks[secondQuad]);
+  V(inter_sem);
   
   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
   // stoplight driver can return to the menu cleanly.
@@ -215,7 +233,29 @@ void
 turnleft(void *p, unsigned long direction)
 {
   struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
-  (void)direction;
+
+  //Enter intersection
+  P(inter_sem);
+  int firstQuad = direction;
+  int secondQuad = (direction + 3) % 4;
+  int thirdQuad = (direction + 2) % 4;
+  //Try to enter X
+  lock_acquire(locks[firstQuad]);
+  //Enter X
+  inQuadrant(firstQuad);
+  //Try to enter (X+3) % 4
+  lock_acquire(locks[secondQuad]);
+  //Leave X, enter (x+3) % 4
+  inQuadrant(secondQuad);
+  lock_release(locks[firstQuad]);
+  //Leave (x+3) % 4, enter (x+2) % 4 
+  lock_acquire(locks[thirdQuad]);
+  inQuadrant(thirdQuad);
+  lock_release(locks[secondQuad]);
+  //Leave intersection
+  leaveIntersection();
+  lock_release(locks[thirdQuad]);
+  V(inter_sem);
   
   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
   // stoplight driver can return to the menu cleanly.
@@ -227,7 +267,18 @@ void
 turnright(void *p, unsigned long direction)
 {
   struct semaphore * stoplightMenuSemaphore = (struct semaphore *)p;
-  (void)direction;
+  
+  //Enter intersection
+  P(inter_sem);
+  int firstQuad = direction;
+  //Try to enter X
+  lock_acquire(locks[firstQuad]);
+  //Enter X
+  inQuadrant(firstQuad);
+  //Leave intersection
+  leaveIntersection();
+  lock_release(locks[firstQuad]);
+  V(inter_sem);
 
   // 08 Feb 2012 : GWA : Please do not change this code. This is so that your
   // stoplight driver can return to the menu cleanly.
