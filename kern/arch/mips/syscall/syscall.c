@@ -38,6 +38,9 @@
 #include <vfs.h>
 #include <vnode.h>
 #include <kern/fcntl.h>
+#include <kern/unistd.h>
+#include <uio.h>
+#include <kern/iovec.h>
 
 /*
  * System call dispatcher.
@@ -169,7 +172,7 @@ enter_forked_process(struct trapframe *tf)
 
 static struct vnode* console;
 static char conname[] = "con:";
-static const char* condevname = "con";
+// static const char* condevname = "con";
 /* Initialization Functions */
 
 /* Get the Console vnode once, so we dont't have to later */
@@ -187,36 +190,54 @@ console_init()
 	KASSERT(result == 0);
 	return result;
 
+	/*Not sure if we can just keep reusing the static vnode console
+	after we get it once. So here is the code that uses vfs_root. Again
+	not sure what is right but this seemed to work...
+
+	//Get a Console vnode (CALL THIS AFTER vfs_open was already called)
+	vfs_biglock_acquire();
+	result = vfs_getroot(condevname, &console);
+	kprintf("\n Tried to get the console again: %d", result);
+	vfs_biglock_release();
+	*/
 }
+
 //0 stdin
 //1 stdout
 //2 stderr
 int
 sys_write(int fd, const void* buf, size_t nbytes)
 {	
-	kprintf("\nParameter 1:%d",fd);
-	kprintf("\nParameter 2:%s", (char*) buf);
-	kprintf("\nParameter 3:%d", nbytes);
+	//Can't write to Standard In
+	if(fd == STDIN_FILENO)
+	{
+		return EBADF;
+	}
+	struct iovec iov;
+	struct uio u;
+	int result;
+	//kprintf("\nParameter 1:%d",fd);
+	//kprintf("\nParameter 2:%s", (char*) buf);
+	//kprintf("\nParameter 3:%d", nbytes);
 
-	// struct vnode* console;
-	vfs_biglock_acquire();
-	// int result = vfs_getroot("con",&console);
+	KASSERT(console != NULL);
+
+	//Create an iovec struct.
+	iov.iov_ubase = (userptr_t) buf;
+	iov.iov_len = nbytes;
+	//Create a uio struct, now.
+	u.uio_iov = &iov; 
+	u.uio_iovcnt = 1;
+	u.uio_offset = 0;
+	u.uio_resid = nbytes;
+	u.uio_rw = UIO_WRITE;
+	u.uio_space = curthread->t_addrspace;
+
 /*    vop_write       - Write data from uio to file at offset specified
  *                      in the uio, updating uio_resid to reflect the
  *                      amount written, and updating uio_offset to match.
  *                      Not allowed on directories or symlinks.*/
-	char conname[] = "con:";
-	int result = vfs_open(conname,1,0,&console);
-	vfs_biglock_release();
-	// VOP_WRITE(console, NULL);
-	kprintf("\nGot console with return code of: %d",result);
-	vfs_biglock_acquire();
-	result = vfs_getroot(condevname, &console);
-	kprintf("\n Tried to get the console again: %d", result);
-	vfs_biglock_release();
 
-	//dont need to create vnode object, just create ptr
-	//need to call VOP_WRITE here, with the appropriate data structures
-
-	return 0;	
+	result = VOP_WRITE(console, &u);
+	return result;	
 }
