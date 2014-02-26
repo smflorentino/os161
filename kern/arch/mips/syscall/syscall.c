@@ -99,6 +99,7 @@ syscall(struct trapframe *tf)
 
 	retval = 0;
 
+
 	switch (callno) {
 	    case SYS_reboot:
 		err = sys_reboot(tf->tf_a0);
@@ -109,6 +110,10 @@ syscall(struct trapframe *tf)
 				 (userptr_t)tf->tf_a1);
 		break;
 
+		/*Write*/
+		case SYS_write:
+			err = sys_write((int) tf->tf_a0, (const void*) tf->tf_a1, (size_t) tf->tf_a2);
+		break;
 	    /* Add stuff here */
  
 	    default:
@@ -158,4 +163,16 @@ void
 enter_forked_process(struct trapframe *tf)
 {
 	(void)tf;
+}
+
+int
+sys_write(int fd, const void* buf, size_t nbytes)
+{	
+	kprintf("\nParameter 1:%d",fd);
+	kprintf("\nParameter 2:%s", (char*) buf);
+	kprintf("\nParameter 3:%d", nbytes);
+	//dont need to create vnode object, just create ptr
+	//need to call VOP_WRITE here, with the appropriate data structures
+
+	return 0;	
 }

@@ -29,6 +29,7 @@
 
 #include <unistd.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 /*
  * true - succeed.
@@ -37,6 +38,12 @@
 int
 main()
 {
+	//Printf with hello world:
+	//This calls the write system call!
+	//printf("Hello World");
+	char buffer[] = "Goodbye Cruel World\n";
+	write(1,buffer,20);
+	while(1) {}
 	/* Just exit with success. */
 	exit(0);
 }
