@@ -134,6 +134,8 @@ boot(void)
 	/* Default bootfs - but ignore failure, in case emu0 doesn't exist */
 	vfs_setbootfs("emu0");
 
+	/*Even Later Initialization (ASST2 Stuff)*/
+	console_init();
 
 	/*
 	 * Make sure various things aren't screwed up.

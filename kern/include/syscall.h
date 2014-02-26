@@ -59,4 +59,8 @@ int sys_reboot(int code);
 int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 int sys_write(int fd, const void*, size_t nbytes);
 
+/* 
+ * Startup initialization functions 
+ */
+int console_init(void); 
 #endif /* _SYSCALL_H_ */

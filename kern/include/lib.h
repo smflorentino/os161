@@ -90,6 +90,7 @@
 #define DB_KMALLOC     0x800
 
 #define DB_CV		   0x1000
+#define DB_WRITE	   0x2000
 
 extern uint32_t dbflags;
 

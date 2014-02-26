@@ -36,6 +36,8 @@
 #include <current.h>
 #include <syscall.h>
 #include <vfs.h>
+#include <vnode.h>
+#include <kern/fcntl.h>
 
 /*
  * System call dispatcher.
@@ -165,6 +167,27 @@ enter_forked_process(struct trapframe *tf)
 	(void)tf;
 }
 
+static struct vnode* console;
+static char conname[] = "con:";
+static const char* condevname = "con";
+/* Initialization Functions */
+
+/* Get the Console vnode once, so we dont't have to later */
+int
+console_init()
+{
+	int result;
+	//Get the Console vnode
+	vfs_biglock_acquire();
+	DEBUG(DB_WRITE,"Getting console vnode...");
+	//path, openflags (O_WRONLY), mode (ignored b/c no permissions), vnode
+	result = vfs_open(conname,O_WRONLY,0,&console);
+	vfs_biglock_release();
+	KASSERT(console != NULL);
+	KASSERT(result == 0);
+	return result;
+
+}
 //0 stdin
 //1 stdout
 //2 stderr
@@ -175,13 +198,23 @@ sys_write(int fd, const void* buf, size_t nbytes)
 	kprintf("\nParameter 2:%s", (char*) buf);
 	kprintf("\nParameter 3:%d", nbytes);
 
-	struct vnode* console;
+	// struct vnode* console;
 	vfs_biglock_acquire();
 	// int result = vfs_getroot("con",&console);
+/*    vop_write       - Write data from uio to file at offset specified
+ *                      in the uio, updating uio_resid to reflect the
+ *                      amount written, and updating uio_offset to match.
+ *                      Not allowed on directories or symlinks.*/
 	char conname[] = "con:";
 	int result = vfs_open(conname,1,0,&console);
 	vfs_biglock_release();
-	kprintf("\nGot console?%d",result);
+	// VOP_WRITE(console, NULL);
+	kprintf("\nGot console with return code of: %d",result);
+	vfs_biglock_acquire();
+	result = vfs_getroot(condevname, &console);
+	kprintf("\n Tried to get the console again: %d", result);
+	vfs_biglock_release();
+
 	//dont need to create vnode object, just create ptr
 	//need to call VOP_WRITE here, with the appropriate data structures
 
