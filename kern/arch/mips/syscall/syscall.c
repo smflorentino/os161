@@ -191,7 +191,9 @@ console_init()
 	return result;
 
 	/*Not sure if we can just keep reusing the static vnode console
-	after we get it once. So here is the code that uses vfs_root. Again
+	after we get it once. Nor do I have any clue on whether this vnode
+	is thread-safe (it probably isn't, but who knows)
+	So here is the code that uses vfs_root, in case we need it. Again
 	not sure what is right but this seemed to work...
 
 	//Get a Console vnode (CALL THIS AFTER vfs_open was already called)
@@ -207,20 +209,35 @@ console_init()
 //2 stderr
 int
 sys_write(int fd, const void* buf, size_t nbytes)
-{	
-	//Can't write to Standard In
-	if(fd == STDIN_FILENO)
-	{
-		return EBADF;
-	}
-	struct iovec iov;
-	struct uio u;
-	int result;
+{
 	//kprintf("\nParameter 1:%d",fd);
 	//kprintf("\nParameter 2:%s", (char*) buf);
 	//kprintf("\nParameter 3:%d", nbytes);
 
-	KASSERT(console != NULL);
+	//Can't write to Standard In
+	//TODO...need more data cleansing here...
+	if(fd == STDIN_FILENO)
+	{
+		return EBADF;
+	}
+	if(buf == NULL)
+	{
+		return EFAULT;
+	}
+
+	//Declare stuff we need
+	struct vnode* device;
+	struct iovec iov;
+	struct uio u;
+	int result;
+
+	//Write to Standard Out or Standard Err
+	if(fd == STDOUT_FILENO || fd == STDERR_FILENO)
+	{
+		KASSERT(console != NULL);
+		device = console;
+	}
+	//TODO handle when fd is an actual file...
 
 	//Create an iovec struct.
 	iov.iov_ubase = (userptr_t) buf;
@@ -232,12 +249,9 @@ sys_write(int fd, const void* buf, size_t nbytes)
 	u.uio_resid = nbytes;
 	u.uio_rw = UIO_WRITE;
 	u.uio_space = curthread->t_addrspace;
-
-/*    vop_write       - Write data from uio to file at offset specified
- *                      in the uio, updating uio_resid to reflect the
- *                      amount written, and updating uio_offset to match.
- *                      Not allowed on directories or symlinks.*/
-
-	result = VOP_WRITE(console, &u);
+	//Pass this stuff to VOP_WRITE
+	result = VOP_WRITE(device, &u);
+	
+	//TODO check for nonzero error codes and return something else if needed...
 	return result;	
 }
