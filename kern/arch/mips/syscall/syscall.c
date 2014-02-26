@@ -117,8 +117,11 @@ syscall(struct trapframe *tf)
 
 		/*Write*/
 		case SYS_write:
-			err = sys_write((int) tf->tf_a0, (const void*) tf->tf_a1, (size_t) tf->tf_a2);
+			err = sys_write((int) tf->tf_a0, (const void*) tf->tf_a1, (size_t) tf->tf_a2, &retval);
 		break;
+
+		case SYS_read:
+			err = sys_read((int) tf->tf_a0, (const void*) tf->tf_a1, (size_t) tf->tf_a2, &retval);
 	    /* Add stuff here */
  
 	    default:
@@ -139,7 +142,7 @@ syscall(struct trapframe *tf)
 	}
 	else {
 		/* Success. */
-		tf->tf_v0 = retval;
+		tf->tf_v0 = retval; /* retval, if appropriate for syscall */
 		tf->tf_a3 = 0;      /* signal no error */
 	}
 	
@@ -173,6 +176,7 @@ enter_forked_process(struct trapframe *tf)
 static struct vnode* console;
 static char conname[] = "con:";
 // static const char* condevname = "con";
+
 /* Initialization Functions */
 
 /* Get the Console vnode once, so we dont't have to later */
@@ -181,11 +185,11 @@ console_init()
 {
 	int result;
 	//Get the Console vnode
-	vfs_biglock_acquire();
+	// vfs_biglock_acquire();
 	DEBUG(DB_WRITE,"Getting console vnode...");
 	//path, openflags (O_WRONLY), mode (ignored b/c no permissions), vnode
 	result = vfs_open(conname,O_WRONLY,0,&console);
-	vfs_biglock_release();
+	// vfs_biglock_release();
 	KASSERT(console != NULL);
 	KASSERT(result == 0);
 	return result;
@@ -204,11 +208,22 @@ console_init()
 	*/
 }
 
+/* The write() System call
+ * Calls the following function:
+ *
+ *    vop_write       - Write data from uio to file at offset specified
+ *                      in the uio, updating uio_resid to reflect the
+ *                      amount written, and updating uio_offset to match.
+ *                      Not allowed on directories or symlinks.
+ * Per the man pages:
+ * Each read (or write) operation is atomic relative to other I/O to the same file.
+*/
+
 //0 stdin
 //1 stdout
 //2 stderr
 int
-sys_write(int fd, const void* buf, size_t nbytes)
+sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 {
 	//kprintf("\nParameter 1:%d",fd);
 	//kprintf("\nParameter 2:%s", (char*) buf);
@@ -240,18 +255,37 @@ sys_write(int fd, const void* buf, size_t nbytes)
 	//TODO handle when fd is an actual file...
 
 	//Create an iovec struct.
-	iov.iov_ubase = (userptr_t) buf;
-	iov.iov_len = nbytes;
-	//Create a uio struct, now.
+	iov.iov_ubase = (userptr_t) buf; //User pointer is the buffer
+	iov.iov_len = nbytes; //The lengeth is the number of bytes passed in
+	//Create a uio struct, too.
 	u.uio_iov = &iov; 
-	u.uio_iovcnt = 1;
-	u.uio_offset = 0;
-	u.uio_resid = nbytes;
-	u.uio_rw = UIO_WRITE;
-	u.uio_space = curthread->t_addrspace;
+	u.uio_iovcnt = 1; //Only 1 iovec (the one we created above)
+	u.uio_offset = 0; //Start at the beginning
+	u.uio_resid = nbytes; //Amount of data remaining to transfer (all of it)
+	u.uio_rw = UIO_WRITE; //Operation Type: write 
+	u.uio_space = curthread->t_addrspace; //Get address space from curthread (is this right?)
+	
 	//Pass this stuff to VOP_WRITE
 	result = VOP_WRITE(device, &u);
-	
-	//TODO check for nonzero error codes and return something else if needed...
-	return result;	
+	if(result != 0)
+	{
+		//TODO check for nonzero error codes and return something else if needed...
+		//return proper error code
+		return -1;
+	}
+
+	//resid amount of data remaining to transfer. nbytes the amount of data we need to write.
+	//Our write succeeded. Per the man pages, return the # of bytes written (might not be everything)
+	*retval = nbytes - u.uio_resid;
+	return 0;
+}
+
+int
+sys_read(int fd, const void* buf, size_t buflen, int* retval)
+{
+	(void)fd;
+	(void)buf;
+	(void)buflen;
+	(void)retval;
+	return 0;
 }

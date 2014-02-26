@@ -57,8 +57,8 @@ void enter_new_process(int argc, userptr_t argv, vaddr_t stackptr,
 
 int sys_reboot(int code);
 int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
-int sys_write(int fd, const void*, size_t nbytes);
-
+int sys_write(int fd, const void*, size_t nbytes, /*Added*/ int* retval);
+int sys_read(int fd, const void*, size_t buflen, /*Added*/ int* retval);
 /* 
  * Startup initialization functions 
  */
