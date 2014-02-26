@@ -76,7 +76,7 @@ struct trapframe {
 	uint32_t tf_s8;
 	uint32_t tf_epc;	/* coprocessor 0 epc register */
 };
-prog
+
 /*
  * MIPS exception codes.
  */

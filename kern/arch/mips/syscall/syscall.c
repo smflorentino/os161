@@ -35,7 +35,7 @@
 #include <thread.h>
 #include <current.h>
 #include <syscall.h>
-
+#include <vfs.h>
 
 /*
  * System call dispatcher.
@@ -165,12 +165,23 @@ enter_forked_process(struct trapframe *tf)
 	(void)tf;
 }
 
+//0 stdin
+//1 stdout
+//2 stderr
 int
 sys_write(int fd, const void* buf, size_t nbytes)
 {	
 	kprintf("\nParameter 1:%d",fd);
 	kprintf("\nParameter 2:%s", (char*) buf);
 	kprintf("\nParameter 3:%d", nbytes);
+
+	struct vnode* console;
+	vfs_biglock_acquire();
+	// int result = vfs_getroot("con",&console);
+	char conname[] = "con:";
+	int result = vfs_open(conname,1,0,&console);
+	vfs_biglock_release();
+	kprintf("\nGot console?%d",result);
 	//dont need to create vnode object, just create ptr
 	//need to call VOP_WRITE here, with the appropriate data structures
 
