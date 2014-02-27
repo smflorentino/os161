@@ -562,7 +562,6 @@ thread_switch(threadstate_t newstate, struct wchan *wc)
 	spl = splhigh();
 
 	cur = curthread;
-
 	/*
 	 * If we're idle, return without doing anything. This happens
 	 * when the timer interrupt interrupts the idle loop.
@@ -584,7 +583,6 @@ thread_switch(threadstate_t newstate, struct wchan *wc)
 		splx(spl);
 		return;
 	}
-
 	/* Put the thread in the right place. */
 	switch (newstate) {
 	    case S_RUN:

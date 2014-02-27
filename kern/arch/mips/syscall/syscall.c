@@ -225,6 +225,8 @@ console_init()
 int
 sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 {
+	DEBUG(DB_THREADS, "\nCur thread name: %s\n",curthread->t_name);
+	DEBUG(DB_THREADS, "Cur thread info %p\n", curthread);
 	//kprintf("\nParameter 1:%d",fd);
 	//kprintf("\nParameter 2:%s", (char*) buf);
 	//kprintf("\nParameter 3:%d", nbytes);
