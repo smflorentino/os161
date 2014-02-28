@@ -325,6 +325,12 @@ file      thread/thread.c
 file      thread/threadlist.c
 
 #
+# Process system
+#
+
+file process/process.c
+file process/processlist.c
+#
 # Virtual memory system
 # (you will probably want to add stuff here while doing the VM assignment)
 #

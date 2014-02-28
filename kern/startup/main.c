@@ -50,6 +50,7 @@
 #include <test.h>
 #include <version.h>
 #include "autoconf.h"  // for pseudoconfig
+#include <processlist.h>
 
 
 /*
@@ -108,19 +109,19 @@ boot(void)
 
 	/* Early initialization. */
 	ram_bootstrap();
-	DEBUG(DB_LOCORE, "Finished ram bootstrapping");
+	DEBUG(DB_LOCORE, "Finished ram bootstrapping\n");
 	thread_bootstrap();
-	DEBUG(DB_THREADS, "Finished thread bootstrapping");
+	DEBUG(DB_THREADS, "Finished thread bootstrapping\n");
 	hardclock_bootstrap();
-	DEBUG(DB_LOCORE, "Finished hardclock bootstrapping");
+	DEBUG(DB_LOCORE, "Finished hardclock bootstrapping\n");
 	vfs_bootstrap();
-	DEBUG(DB_VFS, "Finished vfs bootstrapping");
+	DEBUG(DB_VFS, "Finished vfs bootstrapping\n");
 
 	/* Probe and initialize devices. Interrupts should come on. */
 	kprintf("Device probe...\n");
 	KASSERT(curthread->t_curspl > 0);
 	mainbus_bootstrap();
-	DEBUG(DB_LOCORE, "Finished mainbus bootstrapping");
+	DEBUG(DB_LOCORE, "Finished mainbus bootstrapping\n");
 	KASSERT(curthread->t_curspl == 0);
 	/* Now do pseudo-devices. */
 	pseudoconfig();
@@ -136,6 +137,8 @@ boot(void)
 
 	/*Even Later Initialization (ASST2 Stuff)*/
 	console_init();
+	processlist_bootstrap();
+	DEBUG(DB_PROCESS, "Process List Initialized\n");
 
 	/*
 	 * Make sure various things aren't screwed up.

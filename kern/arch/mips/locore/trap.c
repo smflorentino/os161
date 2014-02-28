@@ -39,6 +39,7 @@
 #include <vm.h>
 #include <mainbus.h>
 #include <syscall.h>
+#include <process.h>
 
 
 /* in exception.S */
@@ -418,6 +419,14 @@ void
 enter_new_process(int argc, userptr_t argv, vaddr_t stack, vaddr_t entry)
 {
 	struct trapframe tf;
+	//Get the current thread
+	struct thread *cur = curthread;
+
+	//Create a new process for it
+	struct process *proc = process_create(cur->t_name);
+
+	//Set pid of the curthread to the process's PID.
+	cur->t_pid = proc->p_id;
 
 	bzero(&tf, sizeof(tf));
 

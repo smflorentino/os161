@@ -41,7 +41,7 @@
 #include <kern/unistd.h>
 #include <uio.h>
 #include <kern/iovec.h>
-
+#include <process.h>
 /*
  * System call dispatcher.
  *
@@ -104,7 +104,9 @@ syscall(struct trapframe *tf)
 
 	retval = 0;
 
-
+	struct thread *cur = curthread;
+	(void)cur;
+	
 	switch (callno) {
 	    case SYS_reboot:
 		err = sys_reboot(tf->tf_a0);
@@ -122,7 +124,15 @@ syscall(struct trapframe *tf)
 
 		case SYS_read:
 			err = sys_read((int) tf->tf_a0, (const void*) tf->tf_a1, (size_t) tf->tf_a2, &retval);
-	    /* Add stuff here */
+			break;
+		
+		case SYS_getpid:
+			err = sys_getpid(&retval);
+			break;
+
+		case SYS__exit:
+			sys_exit((int) tf->tf_a0);
+			break; 		
  
 	    default:
 		kprintf("Unknown syscall %d\n", callno);
@@ -225,8 +235,8 @@ console_init()
 int
 sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 {
-	DEBUG(DB_THREADS, "\nCur thread name: %s\n",curthread->t_name);
-	DEBUG(DB_THREADS, "Cur thread info %p\n", curthread);
+	//DEBUG(DB_THREADS, "\nCur thread name: %s\n",curthread->t_name);
+	//DEBUG(DB_THREADS, "Cur thread info %p\n", curthread);
 	//kprintf("\nParameter 1:%d",fd);
 	//kprintf("\nParameter 2:%s", (char*) buf);
 	//kprintf("\nParameter 3:%d", nbytes);
@@ -264,6 +274,7 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	u.uio_iovcnt = 1; //Only 1 iovec (the one we created above)
 	u.uio_offset = 0; //Start at the beginning
 	u.uio_resid = nbytes; //Amount of data remaining to transfer (all of it)
+	u.uio_segflg = UIO_USERSPACE;
 	u.uio_rw = UIO_WRITE; //Operation Type: write 
 	u.uio_space = curthread->t_addrspace; //Get address space from curthread (is this right?)
 	
@@ -285,9 +296,29 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 int
 sys_read(int fd, const void* buf, size_t buflen, int* retval)
 {
+
 	(void)fd;
 	(void)buf;
 	(void)buflen;
 	(void)retval;
 	return 0;
+}
+
+int
+sys_getpid(int* retval)
+{
+	//Sanity Check
+	KASSERT(curthread != NULL);
+	*retval = (int) curthread->t_pid;
+	return 0;
+}
+
+void
+sys_exit(int exitcode)
+{
+	kprintf("Exiting Process %d\n",curthread->t_pid);
+	struct thread *cur = curthread;
+	process_exit(cur->t_pid,exitcode);
+	(void) exitcode;
+	return;
 }

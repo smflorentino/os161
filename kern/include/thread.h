@@ -112,6 +112,7 @@ struct thread {
 	/* VFS */
 	struct vnode *t_cwd;		/* current working directory */
 
+	 pid_t t_pid;
 	/* add more here as needed */
 };
 

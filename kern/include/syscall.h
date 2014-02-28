@@ -59,6 +59,10 @@ int sys_reboot(int code);
 int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 int sys_write(int fd, const void*, size_t nbytes, /*Added*/ int* retval);
 int sys_read(int fd, const void*, size_t buflen, /*Added*/ int* retval);
+
+int sys_getpid(/* Added*/ int* retval);
+void sys_exit(int exitcode);
+
 /* 
  * Startup initialization functions 
  */

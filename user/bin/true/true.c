@@ -43,6 +43,8 @@ main()
 	// printf("Hello World");
 	char buffer[] = "Goodbye Cruel World\n";
 	write(1,buffer,20);
+
+	printf("My process ID is: %d\n", getpid());
 	
 	char buffer2[] = "Goodbye Cruel Worl2\n";
 	write(1,buffer2,20);
@@ -53,7 +55,9 @@ main()
 	char buffer4[] = "Goodbye Cruel Worl4\n";
 	write(1,buffer4,20);
 
-	while(1) {}
+	printf("My process ID is: %d\n", getpid());
+	
+	// while(1) {}
 	/* Just exit with success. */
 	exit(0);
 }

@@ -152,6 +152,8 @@ thread_create(const char *name)
 	/* VFS fields */
 	thread->t_cwd = NULL;
 
+	/* Process ID -1 for now*/
+	thread->t_pid = -1;
 	/* If you add to struct thread, be sure to initialize here */
 
 	return thread;
@@ -583,6 +585,8 @@ thread_switch(threadstate_t newstate, struct wchan *wc)
 		splx(spl);
 		return;
 	}
+	//Print the current process ID, applicable. Kernel-only threads have -1 as a PID.
+	// kprintf("=|%d|=",cur->t_pid);
 	/* Put the thread in the right place. */
 	switch (newstate) {
 	    case S_RUN:
