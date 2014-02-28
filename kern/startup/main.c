@@ -50,7 +50,7 @@
 #include <test.h>
 #include <version.h>
 #include "autoconf.h"  // for pseudoconfig
-#include <processlist.h>
+#include <process.h>
 
 
 /*
@@ -137,7 +137,7 @@ boot(void)
 
 	/*Even Later Initialization (ASST2 Stuff)*/
 	console_init();
-	processlist_bootstrap();
+	processtable_bootstrap();
 	DEBUG(DB_PROCESS, "Process List Initialized\n");
 
 	/*
