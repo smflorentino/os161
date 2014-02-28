@@ -5,12 +5,15 @@
 
 #include <types.h>
 #include <thread.h>
-#include <threadlist.h>
+#include <processlist.h>
 
 /* Process Structure */
 struct process {
 	char *p_name;
 	pid_t p_id;
+
+	/* Internal Stuff */
+	struct processlistnode p_listnode; /* Link for run/sleep/zombie lists */
 
 	struct process *p_parentprocess;
 	struct thread *p_thread;
