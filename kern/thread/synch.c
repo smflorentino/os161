@@ -209,7 +209,7 @@ lock_acquire(struct lock *lock)
 {
         KASSERT(lock != NULL);
         KASSERT(curthread != NULL);
-
+        // kprintf("Acquired LOck...\n");
         //Ensure this operation is atomic
         spinlock_acquire(&lock->lk_spinlock);
         
@@ -240,6 +240,7 @@ lock_acquire(struct lock *lock)
 void
 lock_release(struct lock *lock)
 {
+        // kprintf("Release lock\n");
         KASSERT(lock != NULL);
         KASSERT(curthread != NULL);
 
@@ -320,7 +321,7 @@ void
 cv_destroy(struct cv *cv)
 {
         KASSERT(cv != NULL);
-        KASSERT(cv->sup_lock == NULL);
+        // KASSERT(cv->sup_lock == NULL); <- we let who ever supplied the lock worry about it.
 
         //Clean up the CV
         lock_destroy(cv->cv_intlock);
@@ -328,7 +329,7 @@ cv_destroy(struct cv *cv)
         wchan_destroy(cv->cv_wchan);
 
         //Clean up data structures
-        lock_destroy(cv->sup_lock);
+        // lock_destroy(cv->sup_lock); <- cleaned up by the provider of the outside lock
         kfree(cv->cv_name);
         kfree(cv);
 }

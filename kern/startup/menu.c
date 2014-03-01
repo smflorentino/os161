@@ -43,6 +43,7 @@
 #include "opt-synchprobs.h"
 #include "opt-sfs.h"
 #include "opt-net.h"
+#include <process.h>
 
 /*
  * In-kernel menu and command dispatcher.
@@ -104,6 +105,7 @@ cmd_progthread(void *ptr, unsigned long nargs)
 	if (result) {
 		kprintf("Running program %s failed: %s\n", args[0],
 			strerror(result));
+		sys_exit(-1);
 		return;
 	}
 
@@ -127,16 +129,22 @@ int
 common_prog(int nargs, char **args)
 {
 	int result;
-
+	struct process *process;
 #if OPT_SYNCHPROBS
 	kprintf("Warning: this probably won't work with a "
 		"synchronization-problems kernel.\n");
 #endif
 
-	result = thread_fork(args[0] /* thread name */,
+	result = thread_forkp(args[0] /* thread name */,
 			cmd_progthread /* thread function */,
 			args /* thread arg */, nargs /* thread arg */,
-			NULL);
+			NULL,/* Thread Process*/ &process);
+	pid_t pid = process->p_id;
+	// kprintf("Forked process ID:%d\n",pid);
+	int status;
+	int junk;
+	/* Invoke waitpid() directly from the kernel */
+	sys_waitpid(pid, &status, 0, &junk);
 	if (result) {
 		kprintf("thread_fork failed: %s\n", strerror(result));
 		return result;

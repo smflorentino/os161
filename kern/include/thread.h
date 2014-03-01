@@ -39,6 +39,7 @@
 
 #include <spinlock.h>
 #include <threadlist.h>
+#include <process.h>
 
 struct addrspace;
 struct cpu;
@@ -141,6 +142,24 @@ int thread_fork(const char *name,
                 void (*func)(void *, unsigned long),
                 void *data1, unsigned long data2, 
                 struct thread **ret);
+
+/*
+ * Make a new thread, which will start executing at "func". The "data"
+ * arguments (one pointer, one number) are passed to the function. The
+ * current thread is used as a prototype for creating the new one. If
+ * "ret" is non-null, the thread structure for the new thread is
+ * handed back. (Note that using said thread structure from the parent
+ * thread should be done only with caution, because in general the
+ * child thread might exit at any time.) Returns an error code.
+ *
+ * NOTE: This is called by the kernel menu assuming that the newly
+ * forked thread will be warping directly to userland as a new process.
+ * Use this function with care.
+ */
+int thread_forkp(const char *name, 
+                void (*func)(void *, unsigned long),
+                void *data1, unsigned long data2, 
+                struct thread **ret, struct process **process);
 
 /*
  * Cause the current thread to exit.

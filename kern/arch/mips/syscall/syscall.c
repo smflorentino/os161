@@ -132,7 +132,10 @@ syscall(struct trapframe *tf)
 
 		case SYS__exit:
 			sys_exit((int) tf->tf_a0);
-			break; 		
+			break;
+
+		case SYS_waitpid:
+			sys_waitpid((int) tf->tf_a0, (int*) tf->tf_a1, (int) tf->tf_a3, &retval); 	
  
 	    default:
 		kprintf("Unknown syscall %d\n", callno);
@@ -316,9 +319,18 @@ sys_getpid(int* retval)
 void
 sys_exit(int exitcode)
 {
-	kprintf("Exiting Process %d\n",curthread->t_pid);
-	struct thread *cur = curthread;
-	process_exit(cur->t_pid,exitcode);
-	(void) exitcode;
+	// kprintf("Exiting Process %d\n",curthread->t_pid);
+	process_exit(curthread->t_pid,exitcode);
 	return;
+}
+
+int
+sys_waitpid(pid_t pid, int* status, int options, int* retval)
+{
+	KASSERT(options == 0);	
+	pid_t curpid = curthread->t_pid; /*getpid()*/
+	process_wait(curpid, pid);
+	*status = get_process_exitcode(pid);
+	*retval = pid;
+	return 0;
 }

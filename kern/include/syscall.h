@@ -62,6 +62,7 @@ int sys_read(int fd, const void*, size_t buflen, /*Added*/ int* retval);
 
 int sys_getpid(/* Added*/ int* retval);
 void sys_exit(int exitcode);
+int sys_waitpid(pid_t pid, int* status, int options, /*Added*/ int* retval);
 
 /* 
  * Startup initialization functions 
