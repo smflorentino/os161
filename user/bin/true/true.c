@@ -41,10 +41,16 @@ main()
 	//Printf with hello world:
 	//This calls the write system call!
 	// printf("Hello World");
+	
+	printf("Should call open now...\n");
+	char to_open[] = "to open\n";
+	//Open file "to open" as read only (O_RDONLY = 0).
+	open(to_open,0);
+
 	char buffer[] = "Goodbye Cruel World\n";
 	write(1,buffer,20);
 
-	printf("My process ID is: %d\n", getpid());
+	printf("My My process ID is: %d\n", getpid());
 	
 	char buffer2[] = "Goodbye Cruel Worl2\n";
 	write(1,buffer2,20);

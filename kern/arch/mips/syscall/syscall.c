@@ -117,11 +117,17 @@ syscall(struct trapframe *tf)
 				 (userptr_t)tf->tf_a1);
 		break;
 
+		/*Open*/
+		case SYS_open:
+			err = sys_open((const char*) tf->tf_a0, (int) tf->tf_a1);
+		break;
+
 		/*Write*/
 		case SYS_write:
 			err = sys_write((int) tf->tf_a0, (const void*) tf->tf_a1, (size_t) tf->tf_a2, &retval);
 		break;
 
+		/*Read*/
 		case SYS_read:
 			err = sys_read((int) tf->tf_a0, (const void*) tf->tf_a1, (size_t) tf->tf_a2, &retval);
 			break;
@@ -229,6 +235,16 @@ console_init()
  * Each read (or write) operation is atomic relative to other I/O to the same file.
 */
 
+int
+sys_open(const char* filename, int flags)
+{
+	(void)filename;
+	(void)flags;
+	kprintf("Inside sys_open\n");
+
+	return 0;
+}
+
 //0 stdin
 //1 stdout
 //2 stderr
@@ -293,6 +309,7 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	return 0;
 }
 
+
 int
 sys_read(int fd, const void* buf, size_t buflen, int* retval)
 {
@@ -301,6 +318,45 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 	(void)buf;
 	(void)buflen;
 	(void)retval;
+
+	//Variables
+	/*
+	int result;
+
+	*/
+
+	//Can't read to Standard Out or Standard Error
+	//TODO...need more data cleansing here...
+	if(fd == STDOUT_FILENO || STDERR_FILENO)
+	{
+		return EBADF;
+	}
+
+	//First check that the specified file is open for reading.
+	//Need to build Filehandle first; part of file handle will indicate status of file:
+	// Read, Write, RW, etc.
+	/*
+	if(!R or RW)
+	{
+		return EBADF;
+	}
+	*/
+
+	//Second, check that the buffer pointed to is valid.
+	/*
+	if(Buffer is invalid)
+	{
+		return EFAULT;
+	}
+	*/
+
+	//result = VOP_READ();
+
+
+
+
+
+
 	return 0;
 }
 
