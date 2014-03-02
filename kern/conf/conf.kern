@@ -330,6 +330,12 @@ file      thread/threadlist.c
 
 file process/process.c
 file process/processlist.c
+
+#
+# Process-File Support
+#
+file filesupport/filesupport.c
+
 #
 # Virtual memory system
 # (you will probably want to add stuff here while doing the VM assignment)
