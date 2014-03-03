@@ -9,6 +9,7 @@
 #include <current.h>
 #include <process.h>
 #include <processlist.h>
+#include <filesupport.h>
 
 /*Max PID is 32767, Min PID is 2*/
 
