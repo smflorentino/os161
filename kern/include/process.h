@@ -3,6 +3,8 @@
 #ifndef _PROCESS_H_
 #define _PROCESS_H_
 
+#define INIT_PROCESS 2
+
 #include <types.h>
 #include <thread.h>
 #include <processlist.h>
@@ -28,6 +30,14 @@ struct process {
 	/* For fork() */
 	struct semaphore *p_forksem;
 };
+
+/* States a process can be in. */
+typedef enum {
+	P_FREE,		/* available (no process) */
+	P_USED,		/* unavalable (process running) */
+	P_ZOMBIE,	/* zombie (process exited) */
+} pidstate_t;
+
 struct process *init_process_create(const char*);
 struct process *process_create(const char*);
 
@@ -43,10 +53,6 @@ bool processtable_biglock_do_i_hold(void);
 
 int allocate_pid(void);
 void release_pid(int);
-
-void increment_waiter_count(pid_t);
-void decrement_waiter_count(pid_t);
-int get_waiter_count(pid_t);
 
 struct process* get_process(pid_t);
 

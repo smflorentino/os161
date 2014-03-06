@@ -19,8 +19,6 @@ static struct process *processtable[PID_MAX + 1];
 static int freepidlist[PID_MAX + 1];
 /* A Table of Parent processes */
 static int parentprocesslist[PID_MAX + 1];
-/* A Table of Waiters on a particular Process ID */
-// static int waitercountpidlist[PID_MAX + 1];
 /* A Table of Exit Codes */
 static int exitcodelist[PID_MAX + 1];
 /* Lock for the Process Table IDs*/
@@ -44,21 +42,6 @@ process_create(const char *name)
 		return NULL;
 	}
 
-	// process->p_waitcv = cv_create(name);
-	// if(process->p_waitcv == NULL) {
-	// 	kfree(process->p_name);
-	// 	kfree(process);
-	// 	return NULL;
-	// }
-
-	// process->p_waitlock = lock_create(name);
-	// if(process->p_waitlock == NULL) {
-	// 	cv_destroy(process->p_waitcv);
-	// 	kfree(process->p_name);
-	// 	kfree(process);
-	// 	return NULL;
-	// }
-
 	process->p_waitsem = sem_create(name,0);
 	if(process->p_waitsem == NULL) {
 		kfree(process->p_name);
@@ -68,27 +51,16 @@ process_create(const char *name)
 
 	process->p_forksem = sem_create(name,0);
 	if(process->p_forksem == NULL) {
-		// lock_destroy(process->p_waitlock);
-		// cv_destroy(process->p_waitcv);
 		kfree(process->p_waitsem);
 		kfree(process->p_name);
 		kfree(process);
 		return NULL;
 	}
 
-	// processlist_init(&process->p_waiters);
-	// if(&process->p_waiters == NULL) {
-	// 	lock_destroy(process->p_waitlock);
-	// 	cv_destroy(process->p_waitcv);
-	// 	kfree(process->p_name);
-	// 	kfree(process);
-	// 	return NULL;
-	// }
 	processtable_biglock_acquire();
 	process->p_id = allocate_pid();
 	processtable[process->p_id] = process;
 	processtable_biglock_release();
-	// kprintf("=Created%d=\n",process->p_id);
 	return process;
 }
 
@@ -110,28 +82,6 @@ init_process_create(const char *name)
 		return NULL;
 	}
 
-	// process->p_waitcv = cv_create(name);
-	// if(process->p_waitcv == NULL) {
-	// 	kfree(process->p_name);
-	// 	kfree(process);
-	// 	return NULL;
-	// }
-
-	// process->p_waitlock = lock_create(name);
-	// if(process->p_waitlock == NULL) {
-	// 	cv_destroy(process->p_waitcv);
-	// 	kfree(process->p_name);
-	// 	kfree(process);
-	// }
-
-	// //processlist_init(&process->p_waiters);
-	// if(&process->p_waiters == NULL) {
-	// 	lock_destroy(process->p_waitlock);
-	// 	cv_destroy(process->p_waitcv);
-	// 	kfree(process->p_name);
-	// 	kfree(process);
-	// 	return NULL;
-	// }
 	process->p_waitsem = sem_create(name,0);
 	if(process->p_waitsem == NULL) {
 		kfree(process->p_name);
@@ -150,7 +100,9 @@ init_process_create(const char *name)
 	}
 
 	processtable_biglock_acquire();
-	process->p_id = allocate_pid();
+	// process->p_id = allocate_pid();
+	process->p_id = INIT_PROCESS;
+	freepidlist[INIT_PROCESS] = P_USED;
 	processtable[process->p_id] = process;
 	processtable_biglock_release();
 
@@ -177,7 +129,7 @@ process_exit(pid_t pid, int exitcode)
 		V(process->p_waitsem);		
 	}
 	/*Notify any future waitpid() calls to return immediately*/
-	freepidlist[pid] = 2;
+	freepidlist[pid] = P_ZOMBIE;
 	processtable_biglock_release();
 	
 	/* Clean up when parent exits */
@@ -192,7 +144,7 @@ process_wait(pid_t pidToWait, pid_t pidToWaitFor)
 	int exitCode;
 	processtable_biglock_acquire();
 	struct process *notifier = get_process(pidToWaitFor);
-	if(freepidlist[pidToWaitFor] == 2)
+	if(freepidlist[pidToWaitFor] == P_ZOMBIE)
 	{
 		//The process we're waiting for already exited.
 		//Return to sys_waitpid to collect the exit code.
@@ -203,32 +155,20 @@ process_wait(pid_t pidToWait, pid_t pidToWaitFor)
 	{
 		processtable_biglock_release();
 		P(notifier->p_waitsem);
-			exitCode = exitcodelist[pidToWaitFor];
+		exitCode = exitcodelist[pidToWaitFor];
 	}
 	process_destroy(notifier->p_id);
 	return exitCode;
-	/* Let notifier know to wake up the parent when leaving */
-	//processlist_addhead(&notifier->p_waiters,waiter);
-	/* Update the waiter count for the process we're going to wait for*/
-	// increment_waiter_count(pidToWaitFor);
-
-	// lock_acquire(notifier->p_waitlock);
-	// cv_wait(notifier->p_waitcv,notifier->p_waitlock);
-	/* We're no longer waiting. Decrement the waiter count for the process we
-	were waiting for */
-	// decrement_waiter_count(pidToWaitFor);
-	// // lock_release(notifier->p_waitlock);
-	// if(waitercountpidlist[pidToWaitFor] == 0)
-	// {
-	// 	//Clean up the zombie process, now
-	// 	process_destroy(pidToWaitFor);	
-	// }
 }
 
 void
 process_destroy(pid_t pid)
 {
-	processtable_biglock_acquire();
+	bool manageLock = processtable_biglock_do_i_hold();
+	if(manageLock == false)
+	{
+		processtable_biglock_acquire();
+	}
 
 	KASSERT(processtable_biglock_do_i_hold());
 	struct process *process = get_process(pid);
@@ -243,7 +183,11 @@ process_destroy(pid_t pid)
 	int num = (int) pid;
 	processtable[num] = NULL;
 	parentprocesslist[pid] = -1;
-	processtable_biglock_release();
+
+	if(manageLock == false)
+	{
+		processtable_biglock_release();
+	}
 }
 
 struct process *
@@ -277,9 +221,9 @@ allocate_pid()
 	for(int i = PID_MIN;i<=PID_MAX;i++)
 	{
 		//found a free PID
-		if(freepidlist[i] == 0)
+		if(freepidlist[i] == P_FREE)
 		{
-			freepidlist[i] = 1;
+			freepidlist[i] = P_USED;
 			return i;
 		}
 	}
@@ -296,7 +240,7 @@ release_pid(int pidToFree)
 	(void)pidToFree;
 	KASSERT(pidToFree >= PID_MIN);
 	// processtable_biglock_acquire();
-	freepidlist[pidToFree] = 0;
+	freepidlist[pidToFree] = P_FREE;
 	// processtable_biglock_release();
 }
 
@@ -325,48 +269,12 @@ void collect_children()
 {
 	for(int i=PID_MIN;i<=PID_MAX;i++)
 	{
-		if(parentprocesslist[i] == 2)
+		if(parentprocesslist[i] == INIT_PROCESS)
 		{
-			int pid = i;
-			KASSERT(processtable_biglock_do_i_hold());
-			struct process *process = get_process(pid);
-			release_pid(pid);
-			kfree(process->p_name);
-			// lock_destroy(process->p_waitlock);
-			sem_destroy(process->p_waitsem);
-			sem_destroy(process->p_forksem);
-			// cv_destroy(process->p_waitcv);
-			//processlist_cleanup(&process->p_waiters);
-			kfree(process);
-			int num = (int) pid;
-			processtable[num] = NULL;
+			process_destroy(i);
 		}
 	}	
 }
-
-// /* When a process calls waitpid(), we call this */
-// //static
-// void
-// increment_waiter_count(pid_t pidToWaitFor)
-// {
-// 	processtable_biglock_acquire();
-// 	waitercountpidlist[pidToWaitFor]++;
-// 	processtable_biglock_release();
-// }
-
-//  Called when a process wakes up or gets terminated 
-// //static
-// void
-// decrement_waiter_count(pid_t pidToWaitFor)
-// {
-// 	processtable_biglock_acquire();
-// 	waitercountpidlist[pidToWaitFor]--;
-// 	//Sanity Check
-// 	KASSERT(waitercountpidlist[pidToWaitFor] >= 0);
-// 	processtable_biglock_release();
-// }
-
-
 
 /*
 	Initialize our process ID list. A 0 indicates free, a 1 indicates used.
@@ -384,12 +292,12 @@ processtable_bootstrap()
 	//Processes up to PID_MIN are not allowed.
 	for(int i=0;i<PID_MIN;i++)
 	{
-		freepidlist[i] = 1;
+		freepidlist[i] = P_USED;
 	}
 	//But everything else is.
 	for(int i = PID_MIN;i<= PID_MAX;i++)
 	{
-		freepidlist[i] = 0;
+		freepidlist[i] = P_FREE;
 	}
 
 	/* Initialize the waiter table. Any process that has another process
