@@ -16,20 +16,24 @@ struct process {
 	struct processlistnode p_listnode; /* Link for run/sleep/zombie lists */
 
 	/*For waitpid()*/
-	struct cv *p_waitcv;
-	struct lock *p_waitlock;
+	struct semaphore *p_waitsem;
+	// struct cv *p_waitcv;
+	// struct lock *p_waitlock;
 	//struct processlist p_waiters;
 
 	pid_t p_parentpid;
 	//struct processlist p_children;
 	struct thread *p_thread;
+
+	/* For fork() */
+	struct semaphore *p_forksem;
 };
 struct process *init_process_create(const char*);
 struct process *process_create(const char*);
 
 void process_exit(pid_t pid, int exitcode);
 void process_destroy(pid_t pid);
-void process_wait(pid_t pidToWait, pid_t pidToWaitFor);
+int process_wait(pid_t pidToWait, pid_t pidToWaitFor);
 /* Call once during system startup to allocate data structures */
 void processtable_bootstrap(void);
 
@@ -47,5 +51,8 @@ int get_waiter_count(pid_t);
 struct process* get_process(pid_t);
 
 int get_process_exitcode(pid_t);
+void set_process_parent(pid_t,pid_t);
+void abandon_children(pid_t);
+void collect_children(void);
 
 #endif /* _PROCESS_H_ */

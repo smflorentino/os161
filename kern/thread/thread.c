@@ -623,6 +623,96 @@ thread_forkp(const char *name,
 }
 
 /*
+ * Create a new thread based on an existing one.
+ * ===USED BY THE FORK SYSTEM CALL===
+ *
+ * The new thread has name NAME, and starts executing in function
+ * ENTRYPOINT. DATA1 and DATA2 are passed to ENTRYPOINT.
+ *
+ * The new thread is given no address space (the caller decides that)
+ * but inherits its current working directory from the caller. It will
+ * start on the same CPU as the caller, unless the scheduler
+ * intervenes first.
+ */
+int
+thread_forkf(const char *name,
+	    void (*entrypoint)(void *data1, unsigned long data2),
+	    void *data1, unsigned long data2,
+	    struct thread **ret, struct process **process)
+{
+	struct thread *newthread;
+
+	newthread = thread_create(name);
+	if (newthread == NULL) {
+		return ENOMEM;
+	}
+
+	// /* Allocate a stack */
+	newthread->t_stack = kmalloc(STACK_SIZE);
+	if (newthread->t_stack == NULL) {
+		thread_destroy(newthread);
+		return ENOMEM;
+	}
+	/* Copy stack from current thread */
+	// memcpy(newthread->t_stack,curthread->t_stack,STACK_SIZE);
+	
+	thread_checkstack_init(newthread);
+
+	/*
+	 * Now we clone various fields from the parent thread.
+	 */
+
+	/* Thread subsystem fields */
+	newthread->t_cpu = curthread->t_cpu;
+
+	/* VM fields */
+	int result = as_copy(curthread->t_addrspace, &(newthread->t_addrspace));
+	// as_activate(newthread->t_addrspace);
+	if(result)
+	{
+		kprintf("Address Space Copy Failed!\n");
+		return ENOMEM;
+	}
+
+	/* VFS fields */
+	if (curthread->t_cwd != NULL) {
+		VOP_INCREF(curthread->t_cwd);
+		newthread->t_cwd = curthread->t_cwd;
+	}
+
+	/*
+	 * Because new threads come out holding the cpu runqueue lock
+	 * (see notes at bottom of thread_switch), we need to account
+	 * for the spllower() that will be done releasing it.
+	 */
+	newthread->t_iplhigh_count++;
+
+	/* Set up the switchframe so entrypoint() gets called */
+	switchframe_init(newthread, entrypoint, data1, data2);
+
+	/* Assign the new thread to a process */
+	//Create a new process for it
+	(*process) = process_create(newthread->t_name);
+	//Set pid of the curthread to the process's PID.
+	newthread->t_pid = (*(*process)).p_id;
+
+	/* Lock the current cpu's run queue and make the new thread runnable */
+	thread_make_runnable(newthread, false);
+
+	/*
+	 * Return new thread structure if it's wanted. Note that using
+	 * the thread structure from the parent thread should be done
+	 * only with caution, because in general the child thread
+	 * might exit at any time.
+	 */
+	if (ret != NULL) {
+		*ret = newthread;
+	}
+
+	return 0;
+}
+
+/*
  * High level, machine-independent context switch code.
  *
  * The current thread is queued appropriately and its state is changed
