@@ -42,6 +42,9 @@
 #include <uio.h>
 #include <kern/iovec.h>
 #include <process.h>
+#include <synch.h>
+#include <spl.h>
+#include <addrspace.h>
 #include <filesupport.h>
 //#include <errno.h>
 
@@ -145,7 +148,12 @@ syscall(struct trapframe *tf)
 
 		case SYS_waitpid:
 			sys_waitpid((int) tf->tf_a0, (int*) tf->tf_a1, (int) tf->tf_a3, &retval); 	
- 
+ 			break;
+ 			
+ 		case SYS_fork:
+ 			sys_fork(tf, &retval);
+ 			break;
+
 	    default:
 		kprintf("Unknown syscall %d\n", callno);
 		err = ENOSYS;
@@ -190,9 +198,63 @@ syscall(struct trapframe *tf)
  * Thus, you can trash it and do things another way if you prefer.
  */
 void
-enter_forked_process(struct trapframe *tf)
+enter_forked_process(void *tf, unsigned long parentpid)
 {
-	(void)tf;
+	as_activate(curthread->t_addrspace);
+	(void)parentpid;
+	struct trapframe newtf;
+	struct trapframe *oldtf = tf;
+	newtf.tf_vaddr = oldtf->tf_vaddr;	
+	newtf.tf_status = oldtf->tf_status;	
+	newtf.tf_cause = oldtf->tf_cause;	
+	newtf.tf_lo = oldtf->tf_lo;
+	newtf.tf_hi = oldtf->tf_hi;
+	newtf.tf_ra = oldtf->tf_ra;		/* Saved register 31 */
+	newtf.tf_at = oldtf->tf_at;		/* Saved register 1 (AT) */
+	newtf.tf_v0 = oldtf->tf_v0;		/* Saved register 2 (v0) */
+	newtf.tf_v1 = oldtf->tf_v1;		/* etc. */
+	newtf.tf_a0 = oldtf->tf_a0;
+	newtf.tf_a1 = oldtf->tf_a1;
+	newtf.tf_a2 = oldtf->tf_a2;
+	newtf.tf_a3 = oldtf->tf_a3;
+	newtf.tf_t0 = oldtf->tf_t0;
+	newtf.tf_t1 = oldtf->tf_t1;
+	newtf.tf_t2 = oldtf->tf_t2;
+	newtf.tf_t3 = oldtf->tf_t3;
+	newtf.tf_t4 = oldtf->tf_t4;
+	newtf.tf_t5 = oldtf->tf_t5;
+	newtf.tf_t6 = oldtf->tf_t6;
+	newtf.tf_t7 = oldtf->tf_t7;
+	newtf.tf_s0 = oldtf->tf_s0;
+	newtf.tf_s1 = oldtf->tf_s1;
+	newtf.tf_s2 = oldtf->tf_s2;
+	newtf.tf_s3 = oldtf->tf_s3;
+	newtf.tf_s4 = oldtf->tf_s4;
+	newtf.tf_s5 = oldtf->tf_s5;
+	newtf.tf_s6 = oldtf->tf_s6;
+	newtf.tf_s7 = oldtf->tf_s7;
+	newtf.tf_t8 = oldtf->tf_t8;
+	newtf.tf_t9 = oldtf->tf_t9;
+	newtf.tf_k0 = oldtf->tf_k0;		/* dummy (see exception.S comments) */
+	newtf.tf_k1 = oldtf->tf_k1;		/* dummy */
+	newtf.tf_gp = oldtf->tf_gp;
+	newtf.tf_sp = oldtf->tf_sp;
+	newtf.tf_s8 = oldtf->tf_s8;
+	newtf.tf_epc = oldtf->tf_epc;
+	newtf.tf_epc += 4;
+	newtf.tf_v0 = 0;
+	newtf.tf_a3 = 0;
+	kfree(tf);
+	// memcpy(newtf, tf, sizeof(struct trapframe));
+	// (void)junk;
+	// kprintf("Entering Forked Process: %d\n",curthread->t_pid);
+	struct process *parent = get_process((pid_t) parentpid);
+	(void)parent;
+	// P(parent->p_forksem);
+	// newtf_tf_v0 = 0;
+	// newtf_tf_a3 = 0;
+	// newtf->tf_epc +=4;
+	mips_usermode(&newtf);
 }
 
 static struct vnode* console;
@@ -435,8 +497,33 @@ sys_waitpid(pid_t pid, int* status, int options, int* retval)
 {
 	KASSERT(options == 0);	
 	pid_t curpid = curthread->t_pid; /*getpid()*/
-	process_wait(curpid, pid);
-	*status = get_process_exitcode(pid);
+	*status = process_wait(curpid, pid);
+	// *status = get_process_exitcode(pid);
 	*retval = pid;
+	return 0;
+}
+
+int
+sys_fork(struct trapframe *tf, int* retval)
+{
+	int x = splhigh();
+	struct trapframe *frame = kmalloc(sizeof(struct trapframe));
+	memcpy(frame,tf,sizeof(struct trapframe));
+	struct process *process = get_process(curthread->t_pid);
+	// kprintf("\nentering fork...%d\n", curthread->t_pid);
+	unsigned long curpid = (unsigned long) curthread->t_pid;
+	struct process *newprocess;
+	int result = thread_forkf(process->p_name, enter_forked_process,(void*) frame,curpid,NULL,&newprocess);
+	// V(process->p_forksem);
+	if(result)
+	{
+		kprintf("thread_forkf failed! :%d\n", result);
+	}
+	// kprintf("Result: %d\n", result);
+	// kprintf("Child Process ID:%d\n", newprocess->p_id);
+	*retval = newprocess->p_id;
+	set_process_parent(newprocess->p_id,curthread->t_pid);
+	 // kprintf("\nleaving fork...%d\n", curthread->t_pid);
+	splx(x);
 	return 0;
 }

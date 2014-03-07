@@ -161,6 +161,12 @@ int thread_forkp(const char *name,
                 void *data1, unsigned long data2, 
                 struct thread **ret, struct process **process);
 
+/* Fork */
+int thread_forkf(const char *name, 
+                void (*func)(void *, unsigned long),
+                void *data1, unsigned long data2, 
+                struct thread **ret, struct process **process);
+
 /*
  * Cause the current thread to exit.
  * Interrupts need not be disabled.
