@@ -67,6 +67,13 @@ process_create(const char *name)
 
 	process->p_id = allocate_pid();
 	processtable[process->p_id] = process;
+
+	// To Do: initialize fd array to have 0 thru 2 point to stdin, stdout, stderr.
+	// All other pointers to NULL.
+	for(int i = 3; i < 10/*OPEN_MAX*/; i++) {
+		process->p_fd_table[i] = NULL;
+	}
+
 	return process;
 }
 
@@ -114,6 +121,10 @@ init_process_create(const char *name)
 	curthread->t_pid = 1;
 	process->p_id = 1;
 	processtable[process->p_id] = process;
+
+	// To Do: initialize fd array to have 0 thru 2 point ot stdin, stdout, stderr.
+	// All other pointers to NULL.
+
 	return process;
 }
 
@@ -152,6 +163,34 @@ get_process(pid_t pid)
 {
 	int index = (int) pid;
 	return processtable[index];
+}
+
+// Checks for the fisrt free file descriptor and returns it.
+int
+get_free_file_descriptor(pid_t pid)
+{
+	struct process* proc = get_process(pid);
+	// 0 thru 2 are assumed to be used, so start at 3.
+	for(int i=3; i < 10/*OPEN_MAX*/; i++) {
+		// If the pointer is NULL, the descriptor is free for use.
+		if(proc->p_fd_table[i] == NULL) {
+			return i;
+		}			
+	}
+	// No free file descriptors.
+	return -1;
+}
+
+// Simply return the file handle pointer stored in the file descriptor table.
+struct file_handle *
+get_file_handle(pid_t pid, int fd)
+{
+	struct process* proc = get_process(pid);
+	// To do: made sure fd is valid and account for errors.
+	if(proc->p_fd_table[fd] == NULL) {
+		kprintf("File descriptor %d is not valid.\n", fd);
+	}
+	return proc->p_fd_table[fd];
 }
 
 int

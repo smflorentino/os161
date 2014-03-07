@@ -7,6 +7,14 @@
 #include <thread.h>
 #include <vnode.h>
 
+// The file object list. Used to point to all file objects on the system.
+extern struct file_object* file_object_list[10/*FILE_MAX*/];
+
+// Global array of file object pointers.
+// TODO: initialize all pointer to NULL at boot time.
+//struct file_object*  file_object_list[OPEN_MAX*PID_MAX];
+//int check_file_object_list(char*);
+
 /* File Object Structure */
 struct file_object {
 	char *fo_name;
@@ -18,6 +26,8 @@ struct file_object {
 	struct lock *fo_vnode_lk;
 };
 
+
+
 struct file_object *fo_create(const char*);
 void fo_destroy(const char*);
 
@@ -25,6 +35,8 @@ void fo_vnode_lock_acquire(void);
 void fo_vnode_lock_release(void);
 bool fo_vnode_lock_do_i_hold(void);
 
+// Check if the file handle exists yet, or not. Return index int if it does or -1 if it doesn't.
+int check_file_object_list(char*);
 
 /* File Handle Structure */
 struct file_handle {

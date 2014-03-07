@@ -46,11 +46,11 @@ main()
 
 	// printf("My process ID is: %d\n", getpid());
 	// printf("Hello World");
-	printf("My My process ID is: %d\n", getpid());
+	printf("My process ID is: %d\n", getpid());
 	printf("Should call open now...\n");
-	char to_open[] = "to open\n";
-	//Open file "to open" as read only (O_RDONLY = 0).
-	open(to_open,0);
+	char to_open[] = "open";
+	//Open file "to open" as read only (O_RDONLY = 0, O_CREAT = 4).
+	open(to_open,4);
 
 	char buffer[] = "Goodbye Cruel World\n";
 	write(1,buffer,20);

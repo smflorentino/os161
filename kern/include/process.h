@@ -6,6 +6,7 @@
 #include <types.h>
 #include <thread.h>
 #include <processlist.h>
+#include <limits.h>
 
 /* Process Structure */
 struct process {
@@ -23,6 +24,8 @@ struct process {
 	pid_t p_parentpid;
 	//struct processlist p_children;
 	struct thread *p_thread;
+	// Array of file handle pointers; initialize to NULL pointers on process creation.
+	struct file_handle* p_fd_table[10/*OPEN_MAX*/];
 };
 struct process *init_process_create(const char*);
 struct process *process_create(const char*);
@@ -45,6 +48,8 @@ void decrement_waiter_count(pid_t);
 int get_waiter_count(pid_t);
 
 struct process* get_process(pid_t);
+int get_free_file_descriptor(pid_t);	// Given a process id, returns a file descriptor that is free.
+struct file_handle* get_file_handle(pid_t pid, int fd);	// Given a file descriptor, returns the pointer to the associated file handle.
 
 int get_process_exitcode(pid_t);
 
