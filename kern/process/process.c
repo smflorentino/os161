@@ -247,6 +247,7 @@ get_process_parent(pid_t pid)
 	return parent;
 }
 
+//Checks for the first free file descriptor and returns it
 int
 get_free_file_descriptor(pid_t pid)
 {
