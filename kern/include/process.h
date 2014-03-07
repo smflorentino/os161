@@ -36,10 +36,11 @@ typedef enum {
 	P_FREE,		/* available (no process) */
 	P_USED,		/* unavalable (process running) */
 	P_ZOMBIE,	/* zombie (process exited) */
+	P_INVALID	/* Invalid PID */
 } pidstate_t;
 
 struct process *init_process_create(const char*);
-struct process *process_create(const char*);
+int process_create(const char*, pid_t parent, struct process**);
 
 void process_exit(pid_t pid, int exitcode);
 void process_destroy(pid_t pid);
@@ -51,10 +52,12 @@ void processtable_biglock_acquire(void);
 void processtable_biglock_release(void);
 bool processtable_biglock_do_i_hold(void);
 
-int allocate_pid(void);
+int allocate_pid(pid_t* allocated_pid);
 void release_pid(int);
 
 struct process* get_process(pid_t);
+pidstate_t get_pid_state(pid_t);
+pid_t get_process_parent(pid_t);
 
 int get_process_exitcode(pid_t);
 void set_process_parent(pid_t,pid_t);

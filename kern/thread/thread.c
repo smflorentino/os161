@@ -602,7 +602,12 @@ thread_forkp(const char *name,
 
 	/* Assign the new thread to a process */
 	//Create a new process for it
-	(*process) = process_create(newthread->t_name);
+	int err = process_create(newthread->t_name, curthread->t_pid, process);
+	if(err)
+	{
+		thread_destroy(newthread);
+		return err;
+	}
 	//Set pid of the curthread to the process's PID.
 	newthread->t_pid = (*(*process)).p_id;
 
@@ -670,7 +675,7 @@ thread_forkf(const char *name,
 	// as_activate(newthread->t_addrspace);
 	if(result)
 	{
-		kprintf("Address Space Copy Failed!\n");
+		// kprintf("Address Space Copy Failed!\n");
 		return ENOMEM;
 	}
 
@@ -692,7 +697,12 @@ thread_forkf(const char *name,
 
 	/* Assign the new thread to a process */
 	//Create a new process for it
-	(*process) = process_create(newthread->t_name);
+	int err = process_create(newthread->t_name,curthread->t_pid, process);
+	if(err)
+	{
+		thread_destroy(newthread);
+		return err;
+	}
 	//Set pid of the curthread to the process's PID.
 	newthread->t_pid = (*(*process)).p_id;
 

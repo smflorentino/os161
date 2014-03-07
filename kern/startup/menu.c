@@ -143,8 +143,8 @@ common_prog(int nargs, char **args)
 	// kprintf("Forked process ID:%d\n",pid);
 	int status;
 	int junk;
-	/* Invoke waitpid() directly from the kernel */
-	sys_waitpid(pid, &status, 0, &junk);
+	/* Invoke the kernel version of waitpid() directly from the kernel */
+	kern_sys_waitpid(pid, &status, 0, &junk);
 	if (result) {
 		kprintf("thread_fork failed: %s\n", strerror(result));
 		return result;

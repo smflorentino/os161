@@ -10,6 +10,7 @@
 #include <process.h>
 #include <processlist.h>
 #include <filesupport.h>
+#include <kern/errno.h>
 
 /*Max PID is 32767, Min PID is 2*/
 
@@ -25,28 +26,28 @@ static int exitcodelist[PID_MAX + 1];
 static struct lock *processtable_biglock;
 
 /* Create a new process, and add it to the process table*/
-struct process *
-process_create(const char *name)
+int
+process_create(const char *name, pid_t parent, struct process **ret)
 {
 	struct process *process;
 
 	process = kmalloc(sizeof(struct process));
 	if(process == NULL) {
 		//TODO probably need to fix this.
-		return NULL;
+		return ENOMEM;
 	}
 
 	process->p_name = kstrdup(name);
 	if(process->p_name == NULL) {
 		kfree(process);
-		return NULL;
+		return ENOMEM;
 	}
 
 	process->p_waitsem = sem_create(name,0);
 	if(process->p_waitsem == NULL) {
 		kfree(process->p_name);
 		kfree(process);
-		return NULL;
+		return ENOMEM;
 	}
 
 	process->p_forksem = sem_create(name,0);
@@ -54,14 +55,25 @@ process_create(const char *name)
 		kfree(process->p_waitsem);
 		kfree(process->p_name);
 		kfree(process);
-		return NULL;
+		return ENOMEM;
 	}
 
 	processtable_biglock_acquire();
-	process->p_id = allocate_pid();
+	pid_t pid;
+	int err = allocate_pid(&pid);
+	if(err)
+	{
+		kfree(process->p_waitsem);
+		kfree(process->p_name);
+		kfree(process);
+		return err;
+	}
+	process->p_id = pid;
 	processtable[process->p_id] = process;
+	parentprocesslist[process->p_id] = parent;
 	processtable_biglock_release();
-	return process;
+	*ret = process;
+	return 0;
 }
 
 /* Should only be called once, by the kernel*/
@@ -120,14 +132,12 @@ process_exit(pid_t pid, int exitcode)
 	abandon_children(pid);
 	/*Store the exit code*/
 	exitcodelist[pid] = exitcode;
-	/* Get my parent, if it's still alive*/
-	if(parentprocesslist[pid] != 2)
-	{
-		/*Get the process that is exiting*/
-		struct process *process = get_process(pid);
-		/*Wake up anyone listening*/
-		V(process->p_waitsem);		
-	}
+
+	/*Get the process that is exiting*/
+	struct process *process = get_process(pid);
+	/*Wake up anyone listening (could be INIT_PROCESS)*/
+	V(process->p_waitsem);		
+
 	/*Notify any future waitpid() calls to return immediately*/
 	freepidlist[pid] = P_ZOMBIE;
 	processtable_biglock_release();
@@ -203,6 +213,29 @@ get_process(pid_t pid)
 	return process;
 }
 
+pidstate_t
+get_pid_state(pid_t pid)
+{
+	processtable_biglock_acquire();
+	pidstate_t state = P_INVALID;
+	if(pid >= PID_MIN && pid <= PID_MAX)
+	{
+		state = freepidlist[pid];
+	}
+	processtable_biglock_release();
+	return state;
+}
+
+pid_t
+get_process_parent(pid_t pid)
+{
+	pid_t parent;
+	processtable_biglock_acquire();
+	parent = parentprocesslist[pid];
+	processtable_biglock_release();
+	return parent;
+}
+
 int
 get_process_exitcode(pid_t pid)
 {
@@ -215,7 +248,7 @@ get_process_exitcode(pid_t pid)
 	loop through the array until we find a PID marked free. Then we allocate that one.
 */
 int
-allocate_pid()
+allocate_pid(pid_t* allocated_pid)
 {
 	collect_children();
 	for(int i = PID_MIN;i<=PID_MAX;i++)
@@ -224,13 +257,15 @@ allocate_pid()
 		if(freepidlist[i] == P_FREE)
 		{
 			freepidlist[i] = P_USED;
-			return i;
+			*allocated_pid=i;
+			return 0;
 		}
 	}
 	//Do we really have to panic? Probably not. More likely we need to return an error code to somebody.
 	//But this will have to do for now. 
-	panic("No more available process IDs!");
-	return -1;
+	return ENPROC;
+	// panic("No more available process IDs!");
+	// return -1;
 }
 
 /* Free a Process ID. This should be called when a process is destroyed */
@@ -260,7 +295,7 @@ abandon_children(pid_t dyingParent)
 		if(parentprocesslist[i] == dyingParent)
 		{
 			//Assign parent to be init...
-			parentprocesslist[i] = 2;
+			parentprocesslist[i] = INIT_PROCESS;
 		}
 	}
 }
@@ -269,7 +304,7 @@ void collect_children()
 {
 	for(int i=PID_MIN;i<=PID_MAX;i++)
 	{
-		if(parentprocesslist[i] == INIT_PROCESS)
+		if(parentprocesslist[i] == INIT_PROCESS && freepidlist[i] == P_ZOMBIE)
 		{
 			process_destroy(i);
 		}

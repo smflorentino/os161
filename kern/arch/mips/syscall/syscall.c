@@ -45,6 +45,7 @@
 #include <synch.h>
 #include <spl.h>
 #include <addrspace.h>
+#include <copyinout.h>
 /*
  * System call dispatcher.
  *
@@ -144,11 +145,11 @@ syscall(struct trapframe *tf)
 			break;
 
 		case SYS_waitpid:
-			sys_waitpid((int) tf->tf_a0, (int*) tf->tf_a1, (int) tf->tf_a3, &retval); 	
+			err = sys_waitpid((int) tf->tf_a0, (int*) tf->tf_a1, (int) tf->tf_a3, &retval); 	
  			break;
- 			
+
  		case SYS_fork:
- 			sys_fork(tf, &retval);
+ 			err = sys_fork(tf, &retval);
  			break;
 
 	    default:
@@ -247,7 +248,7 @@ enter_forked_process(void *tf, unsigned long parentpid)
 	// kprintf("Entering Forked Process: %d\n",curthread->t_pid);
 	struct process *parent = get_process((pid_t) parentpid);
 	(void)parent;
-	// P(parent->p_forksem);
+	P(parent->p_forksem);
 	// newtf_tf_v0 = 0;
 	// newtf_tf_a3 = 0;
 	// newtf->tf_epc +=4;
@@ -445,10 +446,36 @@ sys_exit(int exitcode)
 int
 sys_waitpid(pid_t pid, int* status, int options, int* retval)
 {
-	KASSERT(options == 0);	
 	pid_t curpid = curthread->t_pid; /*getpid()*/
+	//We don't support any "options"
+	if(options != 0)
+	{
+		return EINVAL;
+	}
+	//Check if status is null
+	if(status == NULL)
+	{
+		return EFAULT;
+	}
+	//Check if status is an invalid pointer. If so, return err from copyin.
+	int* kstatus;
+	int err = copyin((const_userptr_t) status, kstatus,sizeof(int));
+	if(err)
+	{
+		return err;
+	}
+	//If the process doesn't exist or pid is invalid:
+	pidstate_t pidstate = get_pid_state(pid);
+	if(pidstate == P_FREE || pidstate == P_INVALID)
+	{
+		return ESRCH;
+	}
+	//If we are not the parent
+	if(get_process_parent(pid) != curpid)
+	{
+		return ECHILD;
+	}
 	*status = process_wait(curpid, pid);
-	// *status = get_process_exitcode(pid);
 	*retval = pid;
 	return 0;
 }
@@ -456,24 +483,68 @@ sys_waitpid(pid_t pid, int* status, int options, int* retval)
 int
 sys_fork(struct trapframe *tf, int* retval)
 {
-	int x = splhigh();
+	// int x = splhigh();
+	//Make a copy of the trapframe, so we can pass it to the child:
 	struct trapframe *frame = kmalloc(sizeof(struct trapframe));
+	if(frame == NULL)
+	{
+		//If frame is null, we're out of memory
+		return ENOMEM;
+	}
 	memcpy(frame,tf,sizeof(struct trapframe));
-	struct process *process = get_process(curthread->t_pid);
-	// kprintf("\nentering fork...%d\n", curthread->t_pid);
+	
+	//Get the current process, so we can wait until fork is done.
+	struct process *cur = get_process(curthread->t_pid);
+
+	//Create the new process
 	unsigned long curpid = (unsigned long) curthread->t_pid;
-	struct process *newprocess;
-	int result = thread_forkf(process->p_name, enter_forked_process,(void*) frame,curpid,NULL,&newprocess);
-	// V(process->p_forksem);
+	struct process *newprocess = NULL;
+	int result = thread_forkf(cur->p_name, enter_forked_process,(void*) frame,curpid,NULL,&newprocess);
 	if(result)
 	{
-		kprintf("thread_forkf failed! :%d\n", result);
-	}
-	// kprintf("Result: %d\n", result);
-	// kprintf("Child Process ID:%d\n", newprocess->p_id);
+		kfree(frame);
+		return result;
+	}	
+	//Wait until the child starts to return from fork.
+	V(cur->p_forksem);
+	
+
 	*retval = newprocess->p_id;
-	set_process_parent(newprocess->p_id,curthread->t_pid);
-	 // kprintf("\nleaving fork...%d\n", curthread->t_pid);
-	splx(x);
+	// splx(x);
+	return 0;
+}
+
+/*
+ * waitpid() system call, for use by the kernel ONLY.
+ * This should be called !!!ONLY!!! from the kernel menu, as it does not check to see
+ * if the status pointer passed in is safe or not.
+ */
+int
+kern_sys_waitpid(pid_t pid, int* status, int options, int* retval)
+{
+	pid_t curpid = curthread->t_pid; /*getpid()*/
+	//We don't support any "options"
+	if(options != 0)
+	{
+		return EINVAL;
+	}
+	//Check if status is null
+	if(status == NULL)
+	{
+		return EFAULT;
+	}
+	//If the process doesn't exist or pid is invalid:
+	pidstate_t pidstate = get_pid_state(pid);
+	if(pidstate == P_FREE || pidstate == P_INVALID)
+	{
+		return ESRCH;
+	}
+	//If we are not the parent
+	if(get_process_parent(pid) != curpid)
+	{
+		return ECHILD;
+	}
+	*status = process_wait(curpid, pid);
+	*retval = pid;
 	return 0;
 }
