@@ -46,6 +46,9 @@
 #include <spl.h>
 #include <addrspace.h>
 #include <copyinout.h>
+#include <filesupport.h>
+//#include <errno.h>
+
 /*
  * System call dispatcher.
  *
@@ -123,7 +126,7 @@ syscall(struct trapframe *tf)
 
 		/*Open*/
 		case SYS_open:
-			err = sys_open((const char*) tf->tf_a0, (int) tf->tf_a1);
+			err = sys_open((char*) tf->tf_a0, (int) tf->tf_a1);
 		break;
 
 		/*Write*/
@@ -302,12 +305,59 @@ console_init()
 */
 
 int
-sys_open(const char* filename, int flags)
+sys_open(char* filename, int flags)
 {
-	(void)filename;
-	(void)flags;
+
 	kprintf("Inside sys_open\n");
 
+	// Get current thread and current process
+	struct thread *cur = curthread;
+	struct process *proc = get_process(cur->t_pid);
+	// Get a file handle and file object pointers
+	struct file_handle *fh;
+	struct file_object *fo;
+	int fd;
+	int fo_index; // Index into file object array if it exits; -1 if no object and need to create.
+	int result;
+
+	// Find avaiable file descritpor.
+	fd = get_free_file_descriptor(proc->p_id);
+	if(fd < 0) {
+		// fd table is full; no fd's available to allocate.
+		//errno = EMFILE;		
+		return -1;
+	}
+
+	// Create file handle, with flags initialized; place pointer in process fd table.
+	fh = fh_create(filename, flags);
+	if(fh == NULL) {
+		kprintf("Failed to create file handle.\n");
+		return -1;
+	}
+	proc->p_fd_table[fd] = fh;
+
+	// Check if file object exists already; link to it in file handle if it exists.
+	fo_index = check_file_object_list(filename);
+	if(fo_index < 0) {
+		fo = fo_create(filename);
+	}
+	else {
+		fo = file_object_list[fo_index];
+	}
+
+	// If it doesnt exist (and CREATE was used), create a new file object; link
+	// to it in file handle
+	
+	fh->fh_file_object = fo;
+
+	// Open/create vnode, which is the file. 
+	result = vfs_open(filename, flags,/* Ignore MODE*/ 0, &fo->fo_vnode);
+	if(result)
+	{
+		return result;
+	}
+
+	// Successful sys_open, return file descriptor.
 	return 0;
 }
 
@@ -391,7 +441,7 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 
 	*/
 
-	//Can't read to Standard Out or Standard Error
+	//Can't read from Standard Out or Standard Error
 	//TODO...need more data cleansing here...
 	if(fd == STDOUT_FILENO || STDERR_FILENO)
 	{

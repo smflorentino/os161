@@ -14,6 +14,9 @@
 	*
 	*/
 
+	// Global file object list.
+	struct file_object* file_object_list[10/*FILE_MAX*/];
+
 	/* Create a new file object. */
 	struct file_object *
 	fo_create(const char *name)
@@ -31,11 +34,26 @@
 			return NULL;
 		}
 
-		fo->fo_vnode_lk = lock_create(name);
-		if(fo->fo_vnode_lk == NULL) {
+		fo->fo_vnode = kmalloc(sizeof(struct vnode));
+		if(fo->fo_vnode == NULL) {
 			kfree(fo->fo_name);
 			kfree(fo);
 			return NULL;
+		}
+
+		fo->fo_vnode_lk = lock_create(name);
+		if(fo->fo_vnode_lk == NULL) {
+			kfree(fo->fo_vnode);
+			kfree(fo->fo_name);
+			kfree(fo);
+			return NULL;
+		}
+
+		// Add this new file object to the global file object list.
+		for(int i = 0; i < 10/*FILE_MAX*/; i++) {
+			if(file_object_list[i] == NULL) {
+				file_object_list[i] = fo;
+			}
 		}
 
 		return fo;
@@ -74,6 +92,24 @@
 		return 1;
 	}
 
+	// Searches the file object list array for a fo with a particular name.
+	// Returns index value for fo if it exists; returns -1 if it does not.
+	int
+	check_file_object_list(char *filename)
+	{
+		(void)filename;
+		//struct file_object *fo;
+		//for(int i = 0; i < 10/*FILE_MAX*/; i ++) {
+		//	fo = file_object_list[i];
+		//	if(fo->fo_name == filename) {
+				// File object already exists, bass back its index.
+		//		return i;
+		//	}
+		//}
+		
+		// No file object by that name exists yet.
+		return -1;
+	}
 
 	/*
 	*	File Handle Functions

@@ -72,6 +72,13 @@ process_create(const char *name, pid_t parent, struct process **ret)
 	processtable[process->p_id] = process;
 	parentprocesslist[process->p_id] = parent;
 	processtable_biglock_release();
+
+	// To Do: initialize fd array to have 0 thru 2 point to stdin, stdout, stderr.
+	// All other pointers to NULL.
+	for(int i = 3; i < 10/*OPEN_MAX*/; i++) {
+		process->p_fd_table[i] = NULL;
+	}
+
 	*ret = process;
 	return 0;
 }
@@ -119,6 +126,10 @@ init_process_create(const char *name)
 	processtable_biglock_release();
 
 	curthread->t_pid = process->p_id;
+
+	// To Do: initialize fd array to have 0 thru 2 point ot stdin, stdout, stderr.
+	// All other pointers to NULL.
+
 	return process;
 }
 
@@ -234,6 +245,33 @@ get_process_parent(pid_t pid)
 	parent = parentprocesslist[pid];
 	processtable_biglock_release();
 	return parent;
+}
+
+int
+get_free_file_descriptor(pid_t pid)
+{
+	struct process* proc = get_process(pid);
+	// 0 thru 2 are assumed to be used, so start at 3.
+	for(int i=3; i < 10/*OPEN_MAX*/; i++) {
+		// If the pointer is NULL, the descriptor is free for use.
+		if(proc->p_fd_table[i] == NULL) {
+			return i;
+		}			
+	}
+	// No free file descriptors.
+	return -1;
+}
+
+// Simply return the file handle pointer stored in the file descriptor table.
+struct file_handle *
+get_file_handle(pid_t pid, int fd)
+{
+	struct process* proc = get_process(pid);
+	// To do: made sure fd is valid and account for errors.
+	if(proc->p_fd_table[fd] == NULL) {
+		kprintf("File descriptor %d is not valid.\n", fd);
+	}
+	return proc->p_fd_table[fd];
 }
 
 int
