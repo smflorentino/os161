@@ -419,15 +419,6 @@ void
 enter_new_process(int argc, userptr_t argv, vaddr_t stack, vaddr_t entry)
 {
 	struct trapframe tf;
-	//See thread.c for now.
-	//Get the current thread
-	//struct thread *cur = curthread;
-
-	//Create a new process for it
-	//struct process *proc = process_create(cur->t_name);
-
-	//Set pid of the curthread to the process's PID.
-	//cur->t_pid = proc->p_id;
 
 	bzero(&tf, sizeof(tf));
 

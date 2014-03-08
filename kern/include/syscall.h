@@ -68,6 +68,7 @@ void sys_exit(int exitcode);
 int kern_sys_waitpid(pid_t pid, int* status, int options, /*Added*/ int* retval);
 int sys_waitpid(pid_t pid, int* status, int options, /*Added*/ int* retval);
 int sys_fork(/* Added */ struct trapframe *tf,/*Added*/int* retval);
+int sys_execv(const char* program, char** args, /*Added*/ int* retval);
 
 /* 
  * Startup initialization functions 

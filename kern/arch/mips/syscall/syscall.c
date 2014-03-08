@@ -148,11 +148,14 @@ syscall(struct trapframe *tf)
 			break;
 
 		case SYS_waitpid:
-			err = sys_waitpid((int) tf->tf_a0, (int*) tf->tf_a1, (int) tf->tf_a3, &retval); 	
+			err = sys_waitpid((int) tf->tf_a0, (int*) tf->tf_a1, (int) tf->tf_a2, &retval); 	
  			break;
 
  		case SYS_fork:
  			err = sys_fork(tf, &retval);
+ 			break;
+
+ 		case SYS_execv:
  			break;
 
 	    default:
@@ -201,6 +204,8 @@ syscall(struct trapframe *tf)
 void
 enter_forked_process(void *tf, unsigned long parentpid)
 {
+	// struct process *parent = get_process((pid_t) parentpid);
+	// P(parent->p_forksem);
 	as_activate(curthread->t_addrspace);
 	(void)parentpid;
 	struct trapframe newtf;
@@ -249,9 +254,7 @@ enter_forked_process(void *tf, unsigned long parentpid)
 	// memcpy(newtf, tf, sizeof(struct trapframe));
 	// (void)junk;
 	// kprintf("Entering Forked Process: %d\n",curthread->t_pid);
-	struct process *parent = get_process((pid_t) parentpid);
-	(void)parent;
-	P(parent->p_forksem);
+	// (void)parent;
 	// newtf_tf_v0 = 0;
 	// newtf_tf_a3 = 0;
 	// newtf->tf_epc +=4;
@@ -525,7 +528,8 @@ sys_waitpid(pid_t pid, int* status, int options, int* retval)
 	{
 		return ECHILD;
 	}
-	*status = process_wait(curpid, pid);
+	*kstatus = process_wait(curpid, pid);
+	copyout(kstatus, (userptr_t) status, sizeof(int));
 	*retval = pid;
 	return 0;
 }
@@ -549,6 +553,7 @@ sys_fork(struct trapframe *tf, int* retval)
 	//Create the new process
 	unsigned long curpid = (unsigned long) curthread->t_pid;
 	struct process *newprocess = NULL;
+	// splhigh();
 	int result = thread_forkf(cur->p_name, enter_forked_process,(void*) frame,curpid,NULL,&newprocess);
 	if(result)
 	{
@@ -556,10 +561,12 @@ sys_fork(struct trapframe *tf, int* retval)
 		return result;
 	}	
 	//Wait until the child starts to return from fork.
-	V(cur->p_forksem);
 	
 
 	*retval = newprocess->p_id;
+	// V(cur->p_forksem);
+
+	// spl0();
 	// splx(x);
 	return 0;
 }
@@ -596,5 +603,25 @@ kern_sys_waitpid(pid_t pid, int* status, int options, int* retval)
 	}
 	*status = process_wait(curpid, pid);
 	*retval = pid;
+	return 0;
+}
+
+/* The exec() system call */
+int
+sys_execv(const char* program, char** args, int* retval)
+{
+	char** argsint = args;
+	char* curarg = *argsint;
+	//Number of arguments (each pointer )
+	int argc = 0;
+	while(curarg != NULL)
+	{
+		curarg += 4;
+		argc++;
+	}
+
+	(void)program;
+	(void)args;
+	(void)retval;
 	return 0;
 }
