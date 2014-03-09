@@ -173,6 +173,21 @@ syscall(struct trapframe *tf)
 			retval_is_32 = false;
 			break;
 
+		/* FD redirect */
+		case SYS_dup2:
+			err = sys_dup2((int) tf->tf_a0, (int) tf->tf_a1, &retval);
+			break;
+
+		/* Change Directory */
+		case SYS_chdir:
+			err = sys_chdir((const char*) tf->tf_a0, &retval);
+			break;
+
+		/* Get CWD */
+		case SYS___getcwd:
+			err = sys___getcwd((char*) tf->tf_a0, (size_t) tf->tf_a1, &retval);
+			break;
+
 		case SYS_getpid:
 			err = sys_getpid(&retval);
 			break;
@@ -206,18 +221,18 @@ syscall(struct trapframe *tf)
 		 * code in errno.
 		 */
 		tf->tf_v0 = err;
-		tf->tf_a3 = 1;      /* signal an error */
+		tf->tf_a3 = 1;      				/* signal an error */
 	}
 	else {
 		/* Success. */
 		if (retval_is_32){
-			tf->tf_v0 = retval; /* retval, if appropriate for syscall */
+			tf->tf_v0 = retval; 			/* retval, if appropriate for syscall */
 		}
 		else {
 			tf->tf_v0 = retval64 >> 32;		// High order bits put in v0
 			tf->tf_v1 = retval64;			// Low order bits in v1
 		}
-		tf->tf_a3 = 0;      /* signal no error */
+		tf->tf_a3 = 0;      				/* signal no error */
 	}
 	
 	/*
@@ -351,7 +366,7 @@ int
 sys_open(char* filename, int flags, int *retval)
 {
 
-	kprintf("Inside sys_open\n");
+	//kprintf("Inside sys_open\n");
 
 	// Get current thread and current process
 	struct thread *cur = curthread;
@@ -373,7 +388,7 @@ sys_open(char* filename, int flags, int *retval)
 	// Create file handle, with flags initialized; place pointer in process fd table.
 	fh = fh_create(filename, flags);
 	if(fh == NULL) {
-		kprintf("Failed to create file handle.\n");
+		//kprintf("Failed to create file handle.\n");
 		return EMFILE;
 	}
 	proc->p_fd_table[fd] = fh;
@@ -423,7 +438,7 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	
 	if(fd == STDIN_FILENO)
 	{
-		kprintf("File descriptor is %d.\n",fd);
+		//kprintf("File descriptor is %d.\n",fd);
 		return EBADF;
 	}
 	
@@ -431,7 +446,7 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	// Check if buffer pointer is valid.
 	if(buf == NULL)
 	{
-		kprintf("Bad buffer pointer.\n");
+		//kprintf("Bad buffer pointer.\n");
 		return EFAULT;
 	}
 
@@ -534,14 +549,14 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 	//First check that the specified file is open for reading.
 	if(!(fh->fh_flags & (O_RDONLY|O_RDWR)))
 	{
-		kprintf("File is not open for reading.\n");
+		//kprintf("File is not open for reading.\n");
 		return EBADF;
 	}
 
 	// Check that buffer pointer is valid.
 	if(buf == NULL)
 	{
-		kprintf("Buffer pointer is bad.\n");
+		//kprintf("Buffer pointer is bad.\n");
 		return EBADF;
 	}
 
@@ -558,7 +573,7 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 	
 	result = VOP_READ(fo->fo_vnode, &u);
 	if (result) {
-		kprintf("\nRead opreation failed.\n");
+		//kprintf("\nRead opreation failed.\n");
 		return EIO;
 	}
 
@@ -576,7 +591,7 @@ int
 sys_close(int fd)
 {
 	//(void)filename;
-	kprintf("Inside sys_close\n");
+	//kprintf("Inside sys_close\n");
 
 	// Get current thread and current process
 	struct thread *cur = curthread;
@@ -587,7 +602,7 @@ sys_close(int fd)
 
 	// Check if fd is not a valid file descriptor.
 	if(proc->p_fd_table[fd] == NULL) {
-		kprintf("File descriptor is not valid for closing.\n");
+		//kprintf("File descriptor is not valid for closing.\n");
 		return EBADF;
 	}
 	// Call vfs_close().
@@ -617,7 +632,7 @@ sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
 	struct thread *cur = curthread;
 	struct process *proc = get_process(cur->t_pid);
 	if(proc->p_fd_table[fd] == NULL) {
-		kprintf("File descriptor is not valid for seeking.\n");
+		//kprintf("File descriptor is not valid for seeking.\n");
 		return EBADF;
 	}
 
@@ -651,7 +666,7 @@ sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
 			result = 0;
 			break;
 		default:
-			kprintf("Seek whence is not valid.\n");
+			//kprintf("Seek whence is not valid.\n");
 			return EINVAL;
 			break;
 	}
@@ -662,6 +677,71 @@ sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
 	return 0;
 }
 
+int
+sys_dup2(int oldfd, int newfd, int* retval)
+{
+	(void)oldfd;
+	(void)newfd;
+	*retval = 0;
+	return 0;
+}
+
+int
+sys_chdir(const char* pathname, int* retval)
+{
+	//(void)pathname;
+	int result;
+	char *cd = (char*)pathname;
+
+	if(pathname == NULL) {
+		// Pathname is an invalid pointer.
+		return EFAULT;
+	}
+	result = vfs_chdir(cd);
+	if(result) {
+		// Hard I/O error.
+		return EIO;
+	}
+
+	*retval = 0;
+	return 0;
+
+}
+
+int
+sys___getcwd(char* buf, size_t buflen, int* retval)
+{
+	//(void)buf;
+	//(void)buflen;
+
+	struct iovec iov;
+	struct uio u;
+	int result;
+	//struct thread *cur = curthread;
+	//struct process *proc = get_process(cur->t_pid);
+	//struct file_handle *fh = get_file_handle(proc->p_id, fd);
+	//struct file_object *fo = fh->fh_file_object;
+	//int bytes_read = 0;
+
+	// Initialize iov and uio
+	iov.iov_ubase = (userptr_t) buf;		//User pointer is the buffer
+	iov.iov_len = buflen; 					//The lengeth is the number of bytes passed in
+	u.uio_iov = &iov; 
+	u.uio_iovcnt = 1; 						//Only 1 iovec
+	u.uio_offset = 0; 						//Start at the file handle offset
+	u.uio_resid = buflen;					//Amount of data remaining to transfer
+	u.uio_segflg = UIO_USERSPACE;			//User pointer
+	u.uio_rw = UIO_READ; 					//Operation Type: read 
+	u.uio_space = curthread->t_addrspace;	//Get address space from curthread (is this right?)
+	
+	result = vfs_getcwd(&u);
+	if (result) {
+		return EIO;
+	}
+
+	*retval = buflen - u.uio_resid;
+	return 0;
+}
 int
 sys_getpid(int* retval)
 {

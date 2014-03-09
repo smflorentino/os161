@@ -19,7 +19,7 @@ extern struct file_object* file_object_list[FO_MAX];
 
 /* File Object Structure */
 struct file_object {
-	char *fo_name;
+	char fo_name[NAME_MAX];
 
 	// Pointer to vnode, an abstract representation of a file.
 	struct vnode *fo_vnode;
@@ -39,10 +39,11 @@ bool fo_vnode_lock_do_i_hold(void);
 
 // Check if the file handle exists yet, or not. Return index int if it does or -1 if it doesn't.
 int check_file_object_list(char*);
+void file_object_list_init(void);
 
 /* File Handle Structure */
 struct file_handle {
-	char *fh_name;
+	char fh_name[NAME_MAX];
 
 	// Reference to file handle object.
 	struct file_object *fh_file_object;

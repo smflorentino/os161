@@ -75,7 +75,7 @@ process_create(const char *name, pid_t parent, struct process **ret)
 
 	// To Do: initialize fd array to have 0 thru 2 point to stdin, stdout, stderr.
 	// All other pointers to NULL.
-	for(int i = 3; i < FD_MAX; i++) {
+	for(int i = 0; i < FD_MAX; i++) {
 		process->p_fd_table[i] = NULL;
 	}
 
@@ -129,6 +129,12 @@ init_process_create(const char *name)
 
 	// To Do: initialize fd array to have 0 thru 2 point ot stdin, stdout, stderr.
 	// All other pointers to NULL.
+	for(int i = 0; i < FD_MAX; i++) {
+		process->p_fd_table[i] = NULL;
+	}
+
+	// Clear out the file object list for the first and only time.
+	file_object_list_init();
 
 	return process;
 }
@@ -256,7 +262,7 @@ get_free_file_descriptor(pid_t pid)
 	for(int i=3; i < FD_MAX; i++) {
 		// If the pointer is NULL, the descriptor is free for use.
 		if(proc->p_fd_table[i] == NULL) {
-			kprintf("Grabbed fd %d.\n", i);
+			//kprintf("Grabbed fd %d.\n", i);
 			return i;
 		}			
 	}

@@ -4,7 +4,7 @@
 #define _PROCESS_H_
 
 #define INIT_PROCESS 	2
-#define FD_MAX			10	/*Change to OPEN_MAX at some point*/
+#define FD_MAX			OPEN_MAX//10	/*Change to OPEN_MAX at some point*/
 
 #include <types.h>
 #include <thread.h>

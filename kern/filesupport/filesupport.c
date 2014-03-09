@@ -28,15 +28,16 @@
 			return NULL;
 		}
 
-		fo->fo_name = kstrdup(name);
+		strcpy(fo->fo_name, name);
+		/*kstrdup(name);
 		if(fo->fo_name == NULL) {
 			kfree(fo);
 			return NULL;
-		}
+		}*/
 
 		fo->fo_vnode = kmalloc(sizeof(struct vnode));
 		if(fo->fo_vnode == NULL) {
-			kfree(fo->fo_name);
+			//kfree(fo->fo_name);
 			kfree(fo);
 			return NULL;
 		}
@@ -44,7 +45,7 @@
 		fo->fo_vnode_lk = lock_create(name);
 		if(fo->fo_vnode_lk == NULL) {
 			kfree(fo->fo_vnode);
-			kfree(fo->fo_name);
+			//kfree(fo->fo_name);
 			kfree(fo);
 			return NULL;
 		}
@@ -101,21 +102,29 @@
 	check_file_object_list(char *filename)
 	{
 		(void)filename;
-		/*
+		
 		struct file_object *fo;
 		fo_vnode_lock_acquire();
-		for(int i = 0; i < FO_MAX; i ++) {
+		for(int i = 0; i < FO_MAX; i++) {
 			fo = file_object_list[i];
-			if(fo->fo_name == filename) {
+			if((fo != NULL) && (strcmp(fo->fo_name,filename) == 0)) {
 				// File object already exists, bass back its index.
 				fo_vnode_lock_release();
 				return i;
 			}
 		}
 		fo_vnode_lock_release();
-		*/
+		
 		// No file object by that name exists yet.
 		return -1;
+	}
+
+	void
+	file_object_list_init(void)
+	{
+		for(int i=0; i < FO_MAX; i++) {
+			file_object_list[i] = NULL;
+		}
 	}
 
 	/*
@@ -133,6 +142,7 @@
 			return NULL;
 		}
 
+		strcpy(fh->fh_name, name);
 		// Is this correct for the fh_file_object pointer?
 		fh->fh_file_object = kmalloc(sizeof(struct file_object*));
 		if(fh->fh_file_object == NULL) {
