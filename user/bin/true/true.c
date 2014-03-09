@@ -38,6 +38,21 @@
 int
 main()
 {
+	printf("My process ID is: %d\n", getpid());	
+	int pid = fork();
+	if(pid == 0)
+	{
+		printf("Child PID:%d\n",getpid());
+		printf("Exiting Child\n");
+		exit(550);
+	}
+	else
+	{
+		printf("Parent:%d\n",getpid());
+		int exitcode;
+		waitpid(pid,&exitcode,0);
+		printf("Waited Done.\n");
+	}
 	//Printf with hello world:
 	//This calls the write system call!
 	// // printf("Hello World");
@@ -46,14 +61,14 @@ main()
 
 	// printf("My process ID is: %d\n", getpid());
 	// printf("Hello World");
-	printf("My process ID is: %d\n", getpid());
-	printf("Should call open now...\n");
-	char to_open[] = "open";
-	//Open file "to open" as read only (O_RDONLY = 0, O_CREAT = 4).
-	open(to_open,4);
+	// printf("My process ID is: %d\n", getpid());
+	// printf("Should call open now...\n");
+	// char to_open[] = "open";
+	// //Open file "to open" as read only (O_RDONLY = 0, O_CREAT = 4).
+	// open(to_open,4);
 
-	char buffer[] = "Goodbye Cruel World\n";
-	write(1,buffer,20);
+	// char buffer[] = "Goodbye Cruel World\n";
+	// write(1,buffer,20);
 	
 	// char buffer2[] = "Goodbye Cruel Worl2\n";
 	// write(1,buffer2,20);
