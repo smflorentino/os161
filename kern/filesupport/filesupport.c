@@ -15,7 +15,7 @@
 	*/
 
 	// Global file object list.
-	struct file_object* file_object_list[10/*FILE_MAX*/];
+	struct file_object* file_object_list[FO_MAX];
 
 	/* Create a new file object. */
 	struct file_object *
@@ -50,17 +50,20 @@
 		}
 
 		// Add this new file object to the global file object list.
-		for(int i = 0; i < 10/*FILE_MAX*/; i++) {
+		fo_vnode_lock_acquire();
+		for(int i = 0; i < FO_MAX; i++) {
 			if(file_object_list[i] == NULL) {
 				file_object_list[i] = fo;
+				break;
 			}
 		}
+		fo_vnode_lock_release();
 
 		return fo;
 	}
 
 	void
-	fo_destroy(const char *name)
+	fo_destroy(struct file_object *fo)
 	{
 		// Method to identify particular fo to destroy.
 		//struct file_object *fo = ;
@@ -70,7 +73,7 @@
 		kfree(fo);
 		*/
 
-		(void) name;
+		(void) fo;
 	}
 
 	void
@@ -98,15 +101,19 @@
 	check_file_object_list(char *filename)
 	{
 		(void)filename;
-		//struct file_object *fo;
-		//for(int i = 0; i < 10/*FILE_MAX*/; i ++) {
-		//	fo = file_object_list[i];
-		//	if(fo->fo_name == filename) {
+		/*
+		struct file_object *fo;
+		fo_vnode_lock_acquire();
+		for(int i = 0; i < FO_MAX; i ++) {
+			fo = file_object_list[i];
+			if(fo->fo_name == filename) {
 				// File object already exists, bass back its index.
-		//		return i;
-		//	}
-		//}
-		
+				fo_vnode_lock_release();
+				return i;
+			}
+		}
+		fo_vnode_lock_release();
+		*/
 		// No file object by that name exists yet.
 		return -1;
 	}
@@ -147,20 +154,18 @@
 		// Start at the beginning of the file.
 		fh->fh_offset = 0;
 
+
+
 		return fh;
 	}
 
 	void
-	fh_destroy(const char *name)
+	fh_destroy(struct file_handle *fh)
 	{
-		// Method of getting file handle to be destroyed.
-		//struct file_handle *fh = ;
-		/*
 		lock_destroy(fh->fh_open_lk);
+		kfree(fh->fh_file_object);
 		kfree(fh->fh_name);
 		kfree(fh);
-		*/
-		(void) name;
 	}
 
 	void

@@ -64,6 +64,8 @@ main(int argc, char **argv)
 
 	const char * filename = "fileonlytest.dat";
 
+	printf("Created file name.\n");
+
 	// 23 Mar 2012 : GWA : Test that open works.
 
 	printf("Opening %s\n", filename);

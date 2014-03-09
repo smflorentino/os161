@@ -3,7 +3,8 @@
 #ifndef _PROCESS_H_
 #define _PROCESS_H_
 
-#define INIT_PROCESS 2
+#define INIT_PROCESS 	2
+#define FD_MAX			10	/*Change to OPEN_MAX at some point*/
 
 #include <types.h>
 #include <thread.h>
@@ -32,7 +33,7 @@ struct process {
 	struct semaphore *p_forksem;
 
 	// Array of file handle pointers; initialize to NULL pointers on process creation.
-	struct file_handle* p_fd_table[10/*OPEN_MAX*/];
+	struct file_handle* p_fd_table[FD_MAX];
 };
 
 /* States a process can be in. */
@@ -64,7 +65,8 @@ pidstate_t get_pid_state(pid_t);
 pid_t get_process_parent(pid_t);
 
 int get_free_file_descriptor(pid_t);	// Given a process id, returns a file descriptor that is free.
-struct file_handle* get_file_handle(pid_t pid, int fd);	// Given a file descriptor, returns the pointer to the associated file handle.
+void release_file_descriptor(pid_t, int fd);			// Closing file, so release fd
+struct file_handle* get_file_handle(pid_t, int fd);	// Given a file descriptor, returns the pointer to the associated file handle.
 
 
 int get_process_exitcode(pid_t);

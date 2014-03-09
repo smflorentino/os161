@@ -3,12 +3,14 @@
 #ifndef _FILESUPPORT_H_
 #define _FILESUPPORT_H_
 
+#define FO_MAX	10	/* Change to FILE_MAX at some point. */
+
 #include <types.h>
 #include <thread.h>
 #include <vnode.h>
 
 // The file object list. Used to point to all file objects on the system.
-extern struct file_object* file_object_list[10/*FILE_MAX*/];
+extern struct file_object* file_object_list[FO_MAX];
 
 // Global array of file object pointers.
 // TODO: initialize all pointer to NULL at boot time.
@@ -29,7 +31,7 @@ struct file_object {
 
 
 struct file_object *fo_create(const char*);
-void fo_destroy(const char*);
+void fo_destroy(struct file_object*);
 
 void fo_vnode_lock_acquire(void);
 void fo_vnode_lock_release(void);
@@ -46,7 +48,7 @@ struct file_handle {
 	struct file_object *fh_file_object;
 
 	// 64-bit offset into file.
-	uint64_t fh_offset;
+	off_t fh_offset;
 
 	// flags for R, RW, ...
 	int fh_flags;
@@ -60,7 +62,7 @@ struct file_handle {
 };
 
 struct file_handle *fh_create(const char*, int flags);
-void fh_destroy(const char*);
+void fh_destroy(struct file_handle*);
 
 void fh_open_lock_acquire(void);
 void fh_open_lock_release(void);

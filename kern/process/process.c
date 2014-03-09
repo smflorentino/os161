@@ -75,7 +75,7 @@ process_create(const char *name, pid_t parent, struct process **ret)
 
 	// To Do: initialize fd array to have 0 thru 2 point to stdin, stdout, stderr.
 	// All other pointers to NULL.
-	for(int i = 3; i < 10/*OPEN_MAX*/; i++) {
+	for(int i = 3; i < FD_MAX; i++) {
 		process->p_fd_table[i] = NULL;
 	}
 
@@ -253,14 +253,23 @@ get_free_file_descriptor(pid_t pid)
 {
 	struct process* proc = get_process(pid);
 	// 0 thru 2 are assumed to be used, so start at 3.
-	for(int i=3; i < 10/*OPEN_MAX*/; i++) {
+	for(int i=3; i < FD_MAX; i++) {
 		// If the pointer is NULL, the descriptor is free for use.
 		if(proc->p_fd_table[i] == NULL) {
+			kprintf("Grabbed fd %d.\n", i);
 			return i;
 		}			
 	}
 	// No free file descriptors.
 	return -1;
+}
+
+void
+release_file_descriptor(pid_t pid, int fd)
+{
+	struct process* proc = get_process(pid);
+	proc->p_fd_table[fd] = NULL;
+	// If fd was 0, 1, 2, reset fd to point to STDIN, STDOUT, STDERR
 }
 
 // Simply return the file handle pointer stored in the file descriptor table.
@@ -269,9 +278,11 @@ get_file_handle(pid_t pid, int fd)
 {
 	struct process* proc = get_process(pid);
 	// To do: made sure fd is valid and account for errors.
+	/*
 	if(proc->p_fd_table[fd] == NULL) {
 		kprintf("File descriptor %d is not valid.\n", fd);
 	}
+	*/
 	return proc->p_fd_table[fd];
 }
 

@@ -47,7 +47,8 @@
 #include <addrspace.h>
 #include <copyinout.h>
 #include <filesupport.h>
-//#include <errno.h>
+#include <kern/seek.h>
+#include <kern/stat.h>
 
 /*
  * System call dispatcher.
@@ -92,13 +93,35 @@ syscall(struct trapframe *tf)
 {
 	int callno;
 	int32_t retval;
+	int64_t retval64;
+	bool retval_is_32 = true;	// Indicates if the return values is a 32 bit or 64 bit.
 	int err;
+	off_t arg64_1 = 0;			
+	int whence = 0;
 
+	//kprintf("Inside syscall.\n");
 	KASSERT(curthread != NULL);
 	KASSERT(curthread->t_curspl == 0);
 	KASSERT(curthread->t_iplhigh_count == 0);
+	//kprintf("Past kasserts.\n");
 
 	callno = tf->tf_v0;
+
+	if(callno == SYS_lseek) {
+		// Create the 64-bit arguments, in case we need them.
+		//kprintf("arg2 = %d, arg3 = %d.\n", tf->tf_a2, tf->tf_a3);
+		//arg64_1 = ((off_t) tf->tf_a2) + ((off_t) tf->tf_a3 * 4294967296);
+		// Need to OR and shift in order, since variables are only 32-bit.
+		arg64_1 |= tf->tf_a2;
+		arg64_1 = arg64_1 << 32;
+		arg64_1 |= tf->tf_a3;
+		// Copy in the whence argument from userland.
+		err = copyin((const_userptr_t)(tf->tf_sp+16), &whence, sizeof(whence));
+		if (err) {
+			kprintf("Bad mem point.\n");
+		}
+		//kprintf("Whence = %d., arg61_1 = %ld.\n", whence, (long int)arg64_1);
+	}
 
 	/*
 	 * Initialize retval to 0. Many of the system calls don't
@@ -126,7 +149,7 @@ syscall(struct trapframe *tf)
 
 		/*Open*/
 		case SYS_open:
-			err = sys_open((char*) tf->tf_a0, (int) tf->tf_a1);
+			err = sys_open((char*) tf->tf_a0, (int) tf->tf_a1, &retval);
 		break;
 
 		/*Write*/
@@ -139,6 +162,17 @@ syscall(struct trapframe *tf)
 			err = sys_read((int) tf->tf_a0, (const void*) tf->tf_a1, (size_t) tf->tf_a2, &retval);
 			break;
 		
+		/*Close*/
+		case SYS_close:
+			err = sys_close((int) tf->tf_a0);
+			break;
+
+		/*lseek*/
+		case SYS_lseek:
+			err = sys_lseek((int) tf->tf_a0, (off_t) arg64_1, (int) whence, &retval64);
+			retval_is_32 = false;
+			break;
+
 		case SYS_getpid:
 			err = sys_getpid(&retval);
 			break;
@@ -176,7 +210,13 @@ syscall(struct trapframe *tf)
 	}
 	else {
 		/* Success. */
-		tf->tf_v0 = retval; /* retval, if appropriate for syscall */
+		if (retval_is_32){
+			tf->tf_v0 = retval; /* retval, if appropriate for syscall */
+		}
+		else {
+			tf->tf_v0 = retval64 >> 32;		// High order bits put in v0
+			tf->tf_v1 = retval64;			// Low order bits in v1
+		}
 		tf->tf_a3 = 0;      /* signal no error */
 	}
 	
@@ -308,7 +348,7 @@ console_init()
 */
 
 int
-sys_open(char* filename, int flags)
+sys_open(char* filename, int flags, int *retval)
 {
 
 	kprintf("Inside sys_open\n");
@@ -326,16 +366,15 @@ sys_open(char* filename, int flags)
 	// Find avaiable file descritpor.
 	fd = get_free_file_descriptor(proc->p_id);
 	if(fd < 0) {
-		// fd table is full; no fd's available to allocate.
-		//errno = EMFILE;		
-		return -1;
+		// fd table is full; no fd's available to allocate.		
+		return EMFILE;
 	}
 
 	// Create file handle, with flags initialized; place pointer in process fd table.
 	fh = fh_create(filename, flags);
 	if(fh == NULL) {
 		kprintf("Failed to create file handle.\n");
-		return -1;
+		return EMFILE;
 	}
 	proc->p_fd_table[fd] = fh;
 
@@ -344,22 +383,23 @@ sys_open(char* filename, int flags)
 	if(fo_index < 0) {
 		fo = fo_create(filename);
 	}
+	// If it doesnt exist (and CREATE was used), create a new file object; link to fh
 	else {
 		fo = file_object_list[fo_index];
 	}
-
-	// If it doesnt exist (and CREATE was used), create a new file object; link
-	// to it in file handle
-	
+	if(fo == NULL) {
+		return ENFILE;
+	}
 	fh->fh_file_object = fo;
 
 	// Open/create vnode, which is the file. 
 	result = vfs_open(filename, flags,/* Ignore MODE*/ 0, &fo->fo_vnode);
 	if(result)
 	{
-		return result;
+		return EIO;
 	}
 
+	*retval = fd;
 	// Successful sys_open, return file descriptor.
 	return 0;
 }
@@ -376,28 +416,47 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	//kprintf("\nParameter 2:%s", (char*) buf);
 	//kprintf("\nParameter 3:%d", nbytes);
 
+	///*
+	
+	//kprintf("File Descriptor is %d.\n", fd);
 	//Can't write to Standard In
-	//TODO...need more data cleansing here...
+	
 	if(fd == STDIN_FILENO)
 	{
+		kprintf("File descriptor is %d.\n",fd);
 		return EBADF;
 	}
+	
+
+	// Check if buffer pointer is valid.
 	if(buf == NULL)
 	{
+		kprintf("Bad buffer pointer.\n");
 		return EFAULT;
 	}
 
-	//Declare stuff we need
 	struct vnode* device;
 	struct iovec iov;
 	struct uio u;
 	int result;
+		struct thread *cur = curthread;
+		struct process *proc = get_process(cur->t_pid);
+		struct file_handle *fh = get_file_handle(proc->p_id, fd);
+
 
 	//Write to Standard Out or Standard Err
 	if(fd == STDOUT_FILENO || fd == STDERR_FILENO)
 	{
 		KASSERT(console != NULL);
 		device = console;
+		u.uio_offset = 0; //Start at the beginning
+	}
+	else 
+	{
+
+		struct file_object *fo = fh->fh_file_object;
+		device = fo->fo_vnode;
+		u.uio_offset = fh->fh_offset; //Start at the beginning
 	}
 	//TODO handle when fd is an actual file...
 
@@ -407,7 +466,7 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	//Create a uio struct, too.
 	u.uio_iov = &iov; 
 	u.uio_iovcnt = 1; //Only 1 iovec (the one we created above)
-	u.uio_offset = 0; //Start at the beginning
+	// u.uio_offset = 0; //Start at the beginning
 	u.uio_resid = nbytes; //Amount of data remaining to transfer (all of it)
 	u.uio_segflg = UIO_USERSPACE;
 	u.uio_rw = UIO_WRITE; //Operation Type: write 
@@ -415,66 +474,190 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	
 	//Pass this stuff to VOP_WRITE
 	result = VOP_WRITE(device, &u);
-	if(result != 0)
+	if(result)
 	{
 		//TODO check for nonzero error codes and return something else if needed...
 		//return proper error code
-		return -1;
+		return EIO;
 	}
+
+
 
 	//resid amount of data remaining to transfer. nbytes the amount of data we need to write.
 	//Our write succeeded. Per the man pages, return the # of bytes written (might not be everything)
 	*retval = nbytes - u.uio_resid;
+
+
+	if(fd == STDOUT_FILENO || fd == STDERR_FILENO)
+	{
+		return 0;
+	}
+	else
+	{
+		fh->fh_offset = u.uio_offset;
+	}
 	return 0;
+
 }
 
 
 int
 sys_read(int fd, const void* buf, size_t buflen, int* retval)
 {
-
+	/*
 	(void)fd;
 	(void)buf;
 	(void)buflen;
 	(void)retval;
-
-	//Variables
-	/*
-	int result;
-
 	*/
+
+	//Variables and structs
+	struct iovec iov;
+	struct uio u;
+	int result;
+	struct thread *cur = curthread;
+	struct process *proc = get_process(cur->t_pid);
+	struct file_handle *fh = get_file_handle(proc->p_id, fd);
+	struct file_object *fo = fh->fh_file_object;
+	int bytes_read = 0;
 
 	//Can't read from Standard Out or Standard Error
-	//TODO...need more data cleansing here...
+	//kprintf("Current fd is %d.\n",fd);
+	/*
 	if(fd == STDOUT_FILENO || STDERR_FILENO)
 	{
+		kprintf("Current fd is %d.\n",fd);
+		kprintf("Cannot read from STDOUT or STDERR.\n");
 		return EBADF;
 	}
-
+	*/
 	//First check that the specified file is open for reading.
-	//Need to build Filehandle first; part of file handle will indicate status of file:
-	// Read, Write, RW, etc.
-	/*
-	if(!R or RW)
+	if(!(fh->fh_flags & (O_RDONLY|O_RDWR)))
 	{
+		kprintf("File is not open for reading.\n");
 		return EBADF;
 	}
-	*/
 
-	//Second, check that the buffer pointed to is valid.
-	/*
-	if(Buffer is invalid)
+	// Check that buffer pointer is valid.
+	if(buf == NULL)
 	{
-		return EFAULT;
+		kprintf("Buffer pointer is bad.\n");
+		return EBADF;
 	}
-	*/
 
-	//result = VOP_READ();
+	// Initialize iov and uio
+	iov.iov_ubase = (userptr_t) buf;		//User pointer is the buffer
+	iov.iov_len = buflen; 					//The lengeth is the number of bytes passed in
+	u.uio_iov = &iov; 
+	u.uio_iovcnt = 1; 						//Only 1 iovec
+	u.uio_offset = fh->fh_offset; 			//Start at the file handle offset
+	u.uio_resid = buflen;					//Amount of data remaining to transfer
+	u.uio_segflg = UIO_USERSPACE;			//
+	u.uio_rw = UIO_READ; 					//Operation Type: read 
+	u.uio_space = curthread->t_addrspace;	//Get address space from curthread (is this right?)
+	
+	result = VOP_READ(fo->fo_vnode, &u);
+	if (result) {
+		kprintf("\nRead opreation failed.\n");
+		return EIO;
+	}
 
+	// Determine bytes read.
+	bytes_read = u.uio_offset - fh->fh_offset;
+	// Update file offset in file handle.
+	fh->fh_offset = u.uio_offset;
 
+	*retval = bytes_read;
 
+	return 0;
+}
 
+int
+sys_close(int fd)
+{
+	//(void)filename;
+	kprintf("Inside sys_close\n");
 
+	// Get current thread and current process
+	struct thread *cur = curthread;
+	struct process *proc = get_process(cur->t_pid);
+	// Get a file handle and file object pointers
+	struct file_handle *fh = get_file_handle(proc->p_id, fd);
+	struct file_object *fo = fh->fh_file_object;
+
+	// Check if fd is not a valid file descriptor.
+	if(proc->p_fd_table[fd] == NULL) {
+		kprintf("File descriptor is not valid for closing.\n");
+		return EBADF;
+	}
+	// Call vfs_close().
+	vfs_close(fo->fo_vnode);
+
+	// Decrement file handle reference count; if zero, destroy file handle.
+	fh->fh_open_count -= 1;
+	if(fh->fh_open_count == 0) {
+		fh_destroy(fh);
+	}
+
+	// Free file descriptor; if 0, 1, or 2, reset file descriptor to STDIN, STDOUT, STDERR, respectively.
+	release_file_descriptor(proc->p_id, fd);
+
+	return 0;
+}
+
+int
+sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
+{
+	//(void)fd;
+	//(void)pos;
+	//(void)whence;
+	
+	//kprintf("Inside lseek.\n");
+	//kprintf("fd = %d.\n", fd);
+	struct thread *cur = curthread;
+	struct process *proc = get_process(cur->t_pid);
+	if(proc->p_fd_table[fd] == NULL) {
+		kprintf("File descriptor is not valid for seeking.\n");
+		return EBADF;
+	}
+
+	struct file_handle *fh = get_file_handle(proc->p_id, fd);
+	struct file_object *fo = fh->fh_file_object;
+	
+	// Get the file stats so we can determine file size if needed.
+	struct stat file_stat;
+	int result;
+
+	
+
+	//kprintf("Past stat. Result %d. File size %ld.\n", result, (long int)file_stat.st_size);
+	//kprintf("Whence = %d.\n", whence);
+	switch (whence) {
+		case SEEK_SET:
+			// Beginning of file plus pos.
+			fh->fh_offset = pos;
+			result = 0;
+			break;
+		case SEEK_CUR:
+			// Current offset plus pos.
+			fh->fh_offset += pos;
+			result = 0;
+			break;
+		case SEEK_END:
+			// File size plus pos.
+			result = VOP_STAT(fo->fo_vnode, &file_stat);
+			fh->fh_offset = file_stat.st_size + pos;
+			//fh->fh_offset = pos;
+			result = 0;
+			break;
+		default:
+			kprintf("Seek whence is not valid.\n");
+			return EINVAL;
+			break;
+	}
+	//kprintf("pos = %ld.\n", (long int)pos);
+
+	*retval64 = (int)fh->fh_offset;
 
 	return 0;
 }

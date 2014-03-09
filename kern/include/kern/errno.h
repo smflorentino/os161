@@ -93,7 +93,7 @@
 #define ESOCKTNOSUPPORT 49     /* Socket type not supported */
 #define EPROTONOSUPPORT 50     /* Protocol not supported */
 #define EPROTOTYPE      51     /* Protocol wrong type for socket */
-#define EAFNOSUPPORT   52 /* Address family not supported by protocol family */
+#define EAFNOSUPPORT   	52 /* Address family not supported by protocol family */
 #define ENOPROTOOPT     53     /* Protocol option not available */
 #define EADDRINUSE      54     /* Address already in use */
 #define EADDRNOTAVAIL   55     /* Cannot assign requested address */
