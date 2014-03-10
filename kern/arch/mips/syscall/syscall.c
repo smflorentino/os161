@@ -333,9 +333,18 @@ console_init()
 	// vfs_biglock_acquire();
 	DEBUG(DB_WRITE,"Getting console vnode...");
 	//path, openflags (O_WRONLY), mode (ignored b/c no permissions), vnode
-	result = vfs_open(conname,O_WRONLY,0,&console);
+	
+	struct thread *cur = curthread;
+	struct process *proc = get_process(cur->t_pid);
+	// Get a file handle and file object pointers
+	struct file_handle *fh = file_handle_create(conname);
+	struct file_object *fo = fo_create(conname);
+	fo->fo_vnode = console;
+
+	result = vfs_open(conname,O_WRONLY,0,&fo->fo_vnode);
+
 	// vfs_biglock_release();
-	KASSERT(console != NULL);
+	KASSERT(fo->fo_vnode != NULL);
 	KASSERT(result == 0);
 	return result;
 
@@ -464,7 +473,7 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	//Write to Standard Out or Standard Err
 	if(fd == STDOUT_FILENO || fd == STDERR_FILENO)
 	{
-		KASSERT(console != NULL);
+		//KASSERT(console != NULL);
 		device = console;
 		u.uio_offset = 0; //Start at the beginning
 	}

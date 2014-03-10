@@ -51,6 +51,7 @@
 #include <version.h>
 #include "autoconf.h"  // for pseudoconfig
 #include <process.h>
+#include <filesupport.h>
 
 
 /*
@@ -136,7 +137,7 @@ boot(void)
 	vfs_setbootfs("emu0");
 
 	/*Even Later Initialization (ASST2 Stuff)*/
-	console_init();
+	//console_init();
 	processtable_bootstrap();
 	DEBUG(DB_PROCESS, "Process List Initialized\n");
 
@@ -224,6 +225,8 @@ kmain(char *arguments)
 	
 	//kprintf("scottflo cjowen\n");
 	init_process_create("init");
+	file_object_list_init();
+	console_init();
 	DEBUG(DB_EXEC, "Finished boot()");
 
 	menu(arguments);

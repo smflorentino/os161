@@ -127,6 +127,8 @@ init_process_create(const char *name)
 
 	curthread->t_pid = process->p_id;
 
+	
+
 	// To Do: initialize fd array to have 0 thru 2 point ot stdin, stdout, stderr.
 	// All other pointers to NULL.
 	for(int i = 0; i < FD_MAX; i++) {
@@ -134,7 +136,7 @@ init_process_create(const char *name)
 	}
 
 	// Clear out the file object list for the first and only time.
-	file_object_list_init();
+	//file_object_list_init();
 
 	return process;
 }
