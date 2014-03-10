@@ -44,6 +44,7 @@
 #include <vfs.h>
 #include <syscall.h>
 #include <test.h>
+#include <copyinout.h>
 
 /*
  * Calculates the size of the kargs buffer. The kargs buffer must
@@ -157,13 +158,13 @@ runprogram(char *progname)
  * So, we copy it.
  */
 int
-runprogram1(char** args, unsigned long nargs)
+runprogram1(const char* program, char** args, unsigned long nargs)
 {
 	struct vnode *v;
 	vaddr_t entrypoint, stackptr;
 	int result;
 	char progname[128];
-	strcpy(progname, args[0]);
+	strcpy(progname, program);
 	(void)nargs;
 
 	/* Open the file. */
@@ -177,7 +178,7 @@ runprogram1(char** args, unsigned long nargs)
 
 	/* Create a new address space. */
 	curthread->t_addrspace = as_create();
-	if (curthread->t_addrspace==NULL) {
+	if (curthread->t_addrspace==NULL) {       
 		vfs_close(v);
 		return ENOMEM;
 	}
@@ -210,6 +211,7 @@ runprogram1(char** args, unsigned long nargs)
 	size_t size = calculate_kargsd_size(args, nargs);
 	//Create it
 	void* kargv[size];
+	int arg_ptrs[nargs];
 	//Actually Copy the args into the kernel buffer
 	//Add the NULL pointer (comes after the last arg)
 	kargv[nargs] = NULL;
@@ -219,7 +221,7 @@ runprogram1(char** args, unsigned long nargs)
 	int arg_start_pos = curblock;
 	for(size_t i=0;i<nargs;i++)
 	{
-		kprintf("Current arg:%s\n",args[i]);
+		// kprintf("Current arg:%s\n",args[i]);
 		char* curarg = args[i]; //current arg from args
 		char curarg_split[4]; //= {'a','a','a','a'}; //4 byte buffer
 		char curarg_char = curarg[0];
@@ -229,24 +231,24 @@ runprogram1(char** args, unsigned long nargs)
 			{
 				/*we copied 4 chars. add the buffer to kargv, increment kargv position,
 				, and reset the offset into the buffer */
-				kprintf("Copying \'%c%c%c%c\'to block%d\n", curarg_split[0],curarg_split[1],curarg_split[2],curarg_split[3],curblock);
+				// kprintf("Copying \'%c%c%c%c\'to block%d\n", curarg_split[0],curarg_split[1],curarg_split[2],curarg_split[3],curblock);
 				memcpy( &kargv[curblock], curarg_split, 4);
 				// kargv[curblock] = (void*) curarg_split;
 				curblock_offset = 0;
 				curblock++;
 			}
 
-			kprintf("Current char:%c\n", curarg[j]);
+			// kprintf("Current char:%c\n", curarg[j]);
 			curarg_char = curarg[j];
 			if(curarg_char == '\0')
 			{
-				kprintf("copying terminator..\n");
+				// kprintf("copying terminator..\n");
 				curarg_split[curblock_offset] = '\0';
 				curblock_offset++;
 				break;
 			}
 
-			kprintf("Current block:%d\n",curblock);	
+			// kprintf("Current block:%d\n",curblock);	
 			//copy current char into the 4-byte buffer, increment index.
 			// curarg_char = curarg[j];
 			curarg_split[curblock_offset] = curarg_char;
@@ -257,41 +259,250 @@ runprogram1(char** args, unsigned long nargs)
 		{
 			for(int j=curblock_offset;j<4;j++)
 			{
-				kprintf("padding...\n");
+				// kprintf("padding...\n");
 				curarg_split[curblock_offset] = '\0';
 				curblock_offset++;
 			}
-			kprintf("Copying \'%c%c%c%c\'to block %d\n", curarg_split[0],curarg_split[1],curarg_split[2],curarg_split[3],curblock);
+			// kprintf("Copying \'%c%c%c%c\'to block %d\n", curarg_split[0],curarg_split[1],curarg_split[2],curarg_split[3],curblock);
 			memcpy( &kargv[curblock], curarg_split, 4);
 			// kargv[curblock] = (void*) curarg_split;
 			curblock++;
 			curblock_offset = 0;
 		}
 		//Now, set the pointer in kargv to point to the correct data region:
-		//Note that i is the current arg. kargv[i+1] should always be NULL. 
+		//Note that i is the current arg, and kargv[i+1] should always be NULL. 
 		kargv[i] = (void*) &kargv[arg_start_pos]; 
-				char *x = (char*) kargv[i];
-		kprintf("Contents of block %d: %s\n",i, x);
-		kprintf("assigning arg %d to point to block %d\n",i,arg_start_pos);
+		arg_ptrs[i] = arg_start_pos;
+		// kprintf("Contents of block %d: %s\n",i, x);
+		// kprintf("assigning arg %d to point to block %d\n",i,arg_start_pos);
 		//The next arg, if it exists, will begin at curblock now. 
 		arg_start_pos = curblock; 
 	}
 	for(size_t i = 0;i<size;i++)
 	{
-		if(i < nargs){
-			kprintf("Index: %d Value:%s Location:%p\n",i, (char*) kargv[i],&kargv[i]);
+		if(i <= nargs){
+			// kprintf("Index: %d Value:%s Location:%p\n",i, (char*) kargv[i],&kargv[i]);
 
 		}
 		else{
 			
-			kprintf("Index: %d VAlue:%p Location:%p\n",i, kargv[i],&kargv[i]);
+			// kprintf("Index: %d VAlue:%p Location:%p\n",i, kargv[i],&kargv[i]);
 
 		}
 	}
 
+	/*Copy the Kernel onto the Stack */
+	int bufSize = size * sizeof(void*);
+
+	// kprintf("stackptr:%p\n",(void*) stackptr);
+	for(size_t i =0;i<nargs;i++)
+	{
+		// kprintf("Arg %d points to %d\n",i,arg_ptrs[i]);
+		kargv[i] = (void*) (stackptr - bufSize) + sizeof(void*) * arg_ptrs[i];
+	}
+	result = copyout(kargv, (userptr_t) stackptr-bufSize,bufSize);
+	if(result)
+	{
+		return result;
+	}
+
+	stackptr -= bufSize;
+	// userptr_t argvptr =  (userptr_t) stackptr;
+
+	// kprintf("Size%d\n",size);
+	// kprintf("\nstackptr now: %p\n",(void*) stackptr);
+	// kprintf("argv pointer now: %p\n",(void*) argvptr);
+	// kprintf("address of argv[0] now: %p\n", &argv[0]);
+	// kprintf("argv[0] now: %p\n", argv[0]);
+	// kprintf("argv[0] now: %s\n", (char*) argv[0]);
+	// kprintf("Value of argv:%p\n", argv);
+	// kprintf("Address of argv[0]:%p\n",&argv[0]);
 	/* Warp to user mode. */
-	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
-			  stackptr, entrypoint);
+		enter_new_process(nargs, (userptr_t) stackptr ,
+				  stackptr, entrypoint);
+	//enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
+	//		  stackptr, entrypoint);
+	
+	/* enter_new_process does not return. */
+	panic("enter_new_process returned\n");
+	return EINVAL;
+
+}
+
+/*
+ * Load program "progname" and start running it in usermode.
+ * Does not return except on error.
+ *
+ * Calls vfs_open on progname (args[0]) and thus may destroy it.
+ * So, we copy it.
+ */
+int
+runprogram2(const char* program, char** args, unsigned long nargs)
+{
+	// kprintf("entering runprogram2\n");
+	struct vnode *v;
+	vaddr_t entrypoint, stackptr;
+	int result;
+	char progname[128];
+	strcpy(progname, program);
+	(void)nargs;
+
+	/* Open the file. */
+	result = vfs_open(progname, O_RDONLY, 0, &v);
+	if (result) {
+		return result;
+	}
+	as_destroy(curthread->t_addrspace);
+	curthread->t_addrspace = NULL;
+	// /* We should be a new thread. */
+	KASSERT(curthread->t_addrspace == NULL);
+
+	// /* Create a new address space. */
+	curthread->t_addrspace = as_create();
+	if (curthread->t_addrspace==NULL) {       
+		vfs_close(v);
+		return ENOMEM;
+	}
+
+	// /* Activate it. */
+	// as_activate(curthread->t_addrspace);
+
+	/* Load the executable. */
+	result = load_elf(v, &entrypoint);
+	if (result) {
+		/* thread_exit destroys curthread->t_addrspace */
+		vfs_close(v);
+		return result;
+	}
+
+	/* Done with the file now. */
+	vfs_close(v);
+
+	/* Define the user stack in the address space */
+	result = as_define_stack(curthread->t_addrspace, &stackptr);
+	if (result) {
+		/* thread_exit destroys curthread->t_addrspace */
+		return result;
+	}
+
+	/* Copy program arguments to the kernel buffer*/
+
+	//Calculate the size of the kernel buffer
+	// (void)curarg_split1;
+	size_t size = calculate_kargsd_size(args, nargs);
+	//Create it
+	void* kargv[size];
+	int arg_ptrs[nargs];
+	//Actually Copy the args into the kernel buffer
+	//Add the NULL pointer (comes after the last arg)
+	kargv[nargs] = NULL;
+	//Now populate the data region
+	int curblock = nargs+1; //right after NULL, this the position in kargv.
+	int curblock_offset = 0; //how far we are in to each block of each position of kargv.
+	int arg_start_pos = curblock;
+	for(size_t i=0;i<nargs;i++)
+	{
+		// kprintf("Current arg:%s\n",args[i]);
+		char* curarg = args[i]; //current arg from args
+		char curarg_split[4]; //= {'a','a','a','a'}; //4 byte buffer
+		char curarg_char = curarg[0];
+		for(int j=0; true ;j++) //copy current arg one char at a time, until we hit '\0'
+		{
+			if(curblock_offset == 4)
+			{
+				/*we copied 4 chars. add the buffer to kargv, increment kargv position,
+				, and reset the offset into the buffer */
+				// kprintf("Copying \'%c%c%c%c\'to block%d\n", curarg_split[0],curarg_split[1],curarg_split[2],curarg_split[3],curblock);
+				memcpy( &kargv[curblock], curarg_split, 4);
+				// kargv[curblock] = (void*) curarg_split;
+				curblock_offset = 0;
+				curblock++;
+			}
+
+			// kprintf("Current char:%c\n", curarg[j]);
+			curarg_char = curarg[j];
+			if(curarg_char == '\0')
+			{
+				// kprintf("copying terminator..\n");
+				curarg_split[curblock_offset] = '\0';
+				curblock_offset++;
+				break;
+			}
+
+			// kprintf("Current block:%d\n",curblock);	
+			//copy current char into the 4-byte buffer, increment index.
+			// curarg_char = curarg[j];
+			curarg_split[curblock_offset] = curarg_char;
+			curblock_offset++;
+		}
+		//Pad the remaining block, if it exists, and copy it into kargv.
+		if(curblock_offset > 0)
+		{
+			for(int j=curblock_offset;j<4;j++)
+			{
+				// kprintf("padding...\n");
+				curarg_split[curblock_offset] = '\0';
+				curblock_offset++;
+			}
+			// kprintf("Copying \'%c%c%c%c\'to block %d\n", curarg_split[0],curarg_split[1],curarg_split[2],curarg_split[3],curblock);
+			memcpy( &kargv[curblock], curarg_split, 4);
+			// kargv[curblock] = (void*) curarg_split;
+			curblock++;
+			curblock_offset = 0;
+		}
+		//Now, set the pointer in kargv to point to the correct data region:
+		//Note that i is the current arg, and kargv[i+1] should always be NULL. 
+		kargv[i] = (void*) &kargv[arg_start_pos]; 
+		arg_ptrs[i] = arg_start_pos;
+		// kprintf("Contents of block %d: %s\n",i, x);
+		// kprintf("assigning arg %d to point to block %d\n",i,arg_start_pos);
+		//The next arg, if it exists, will begin at curblock now. 
+		arg_start_pos = curblock; 
+	}
+	for(size_t i = 0;i<size;i++)
+	{
+		if(i <= nargs){
+			// kprintf("Index: %d Value:%s Location:%p\n",i, (char*) kargv[i],&kargv[i]);
+
+		}
+		else{
+			
+			// kprintf("Index: %d VAlue:%p Location:%p\n",i, kargv[i],&kargv[i]);
+
+		}
+	}
+
+	/*Copy the Kernel onto the Stack */
+	int bufSize = size * sizeof(void*);
+
+	// kprintf("stackptr:%p\n",(void*) stackptr);
+	for(size_t i =0;i<nargs;i++)
+	{
+		// kprintf("Arg %d points to %d\n",i,arg_ptrs[i]);
+		kargv[i] = (void*) (stackptr - bufSize) + sizeof(void*) * arg_ptrs[i];
+	}
+	result = copyout(kargv, (userptr_t) stackptr-bufSize,bufSize);
+	if(result)
+	{
+		return result;
+	}
+
+	stackptr -= bufSize;
+	// userptr_t argvptr =  (userptr_t) stackptr;
+
+	// kprintf("Size%d\n",size);
+	// kprintf("\nstackptr now: %p\n",(void*) stackptr);
+	// kprintf("argv pointer now: %p\n",(void*) argvptr);
+	// kprintf("address of argv[0] now: %p\n", &argv[0]);
+	// kprintf("argv[0] now: %p\n", argv[0]);
+	// kprintf("argv[0] now: %s\n", (char*) argv[0]);
+	// kprintf("Value of argv:%p\n", argv);
+	// kprintf("Address of argv[0]:%p\n",&argv[0]);
+	/* Warp to user mode. */
+		enter_new_process(nargs, (userptr_t) stackptr ,
+				  stackptr, entrypoint);
+	//enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
+	//		  stackptr, entrypoint);
 	
 	/* enter_new_process does not return. */
 	panic("enter_new_process returned\n");

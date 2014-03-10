@@ -47,6 +47,7 @@
 #include <addrspace.h>
 #include <mainbus.h>
 #include <vnode.h>
+#include <process.h>
 
 #include "opt-synchprobs.h"
 #include "opt-defaultscheduler.h"

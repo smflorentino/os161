@@ -49,6 +49,7 @@
 #include <filesupport.h>
 #include <kern/seek.h>
 #include <kern/stat.h>
+#include <test.h>
 
 /*
  * System call dispatcher.
@@ -205,6 +206,7 @@ syscall(struct trapframe *tf)
  			break;
 
  		case SYS_execv:
+ 			err = sys_execv((const char*) tf->tf_a0, (char**) tf->tf_a1, &retval);
  			break;
 
 	    default:
@@ -759,7 +761,7 @@ sys_getpid(int* retval)
 void
 sys_exit(int exitcode)
 {
-	// kprintf("Exiting Process %d\n",curthread->t_pid);
+	// kprintf("Exit%d\n",curthread->t_pid);
 	process_exit(curthread->t_pid,exitcode);
 	return;
 }
@@ -779,8 +781,8 @@ sys_waitpid(pid_t pid, int* status, int options, int* retval)
 		return EFAULT;
 	}
 	//Check if status is an invalid pointer. If so, return err from copyin.
-	int* kstatus;
-	int err = copyin((const_userptr_t) status, kstatus,sizeof(int));
+	int kstatus;// = status;
+	int err = copyin((const_userptr_t) status, &kstatus,sizeof(int));
 	if(err)
 	{
 		return err;
@@ -796,8 +798,8 @@ sys_waitpid(pid_t pid, int* status, int options, int* retval)
 	{
 		return ECHILD;
 	}
-	*kstatus = process_wait(curpid, pid);
-	copyout(kstatus, (userptr_t) status, sizeof(int));
+	kstatus = process_wait(curpid, pid);
+	copyout(&kstatus, (userptr_t) status, sizeof(int));
 	*retval = pid;
 	return 0;
 }
@@ -878,16 +880,91 @@ kern_sys_waitpid(pid_t pid, int* status, int options, int* retval)
 int
 sys_execv(const char* program, char** args, int* retval)
 {
-	char** argsint = args;
-	char* curarg = *argsint;
-	//Number of arguments (each pointer )
-	int argc = 0;
-	while(curarg != NULL)
+	char kprogram[128]; (void) kprogram;
+	// char* kprogram = (char*) kmalloc(128); (void) kprogram;
+	int bytesCopied = 0;
+	int result = 0;
+	// char* usrprogram = (char*) program; (void) usrprogram;
+	// const_userptr_t usrprogram = (const_userptr_t) program; (void) usrprogram;
+	char curchar = '\0';
+	do {
+		result = copyin((userptr_t) program,&curchar,sizeof(char));
+		if(result)
+		{
+			return result;
+		}
+		kprogram[bytesCopied] = curchar;
+		bytesCopied++;
+		program = program+1; 
+
+	} while(curchar != '\0');
+	// kprintf("Copied in program\n");
+	int count = 0;
+	bytesCopied = 0;
+
+	int max = 1024 * 4;
+	(void)max;
+	userptr_t curusrarg;
+	char* curarg;
+
+	// kprintf("args0:%s\n",args[0]);
+
+	char* buf = (char*) kmalloc(max);
+	while(args[count] != NULL)
 	{
-		curarg += 4;
-		argc++;
+		//Copy in pointer to current arg..
+		curusrarg = (userptr_t) args[count];
+		result = copyin(curusrarg, (void*) curarg, 4);
+		if(result)
+		{
+			return result;
+		}
+		//Copy in the arg, char by char.
+		do
+		{	
+			if(bytesCopied == max)
+			{
+				return E2BIG;
+			}
+			result = copyin(curusrarg, &curchar, sizeof(char));
+			if(result)
+			{
+				return result;
+			}
+			buf[bytesCopied] = curchar;
+			bytesCopied++;
+			curusrarg++;
+		} while(curchar != '\0');
+		//pad the arg, if needed
+		while(bytesCopied % 4 != 0)
+		{
+			buf[bytesCopied] = '\0';
+			bytesCopied++;
+		}
+		count++;
+
 	}
 
+	// for(int i=0;i<bytesCopied;i++)
+	// {	
+	// 	kprintf("%s\n", (char *) &buf[i]);
+	// }
+
+	char* kargs[count+1];
+	int pos = 0;
+	kargs[count] = NULL;
+	for(int j=0;j<count;j++)
+	{
+		kargs[j] = (char*) &buf[pos];
+		while(buf[pos] != '\0')
+		{
+			pos++;
+		}
+	}
+	// kprintf("kargs[0]:%s\n", (char*) kargs[0]);
+	// kprintf("kargs[1]:%s\n", (char*) kargs[1]);
+	kfree(buf);
+	runprogram2(&kprogram[0], kargs,count);
 	(void)program;
 	(void)args;
 	(void)retval;

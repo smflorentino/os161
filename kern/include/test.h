@@ -110,8 +110,8 @@ int nettest(int, char **);
 /* Routine for running a user-level program. */
 int runprogram(char *progname);
 /* Routing for running a user-level program with args */
-int runprogram1(char** args, unsigned long nargs);
-
+int runprogram1(const char* program, char** args, unsigned long nargs);
+int runprogram2(const char* program, char** args, unsigned long nargs);
 /* Kernel menu system. */
 void menu(char *argstr);
 

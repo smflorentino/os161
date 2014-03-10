@@ -99,10 +99,10 @@ cmd_progthread(void *ptr, unsigned long nargs)
 	/* Hope we fit. */
 	KASSERT(strlen(args[0]) < sizeof(progname));
 
-	strcpy(progname, args[0])
-;
+	strcpy(progname, args[0]);
+
 	// result = runprogram(progname);
-	result = runprogram1(args, nargs);
+	result = runprogram1(progname,args, nargs);
 	if (result) {
 		kprintf("Running program %s failed: %s\n", args[0],
 			strerror(result));
