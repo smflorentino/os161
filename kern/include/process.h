@@ -4,7 +4,7 @@
 #define _PROCESS_H_
 
 #define INIT_PROCESS 	2
-#define FD_MAX			OPEN_MAX//10	/*Change to OPEN_MAX at some point*/
+#define FD_MAX			10//OPEN_MAX	/*Change to OPEN_MAX at some point*/
 
 #include <types.h>
 #include <thread.h>
@@ -30,7 +30,7 @@ struct process {
 	struct thread *p_thread;
 
 	/* For fork() */
-	struct semaphore *p_forksem;
+	// struct semaphore *p_forksem;
 
 	// Array of file handle pointers; initialize to NULL pointers on process creation.
 	struct file_handle* p_fd_table[FD_MAX];
@@ -68,10 +68,11 @@ int get_free_file_descriptor(pid_t);	// Given a process id, returns a file descr
 void release_file_descriptor(pid_t, int fd);			// Closing file, so release fd
 struct file_handle* get_file_handle(pid_t, int fd);	// Given a file descriptor, returns the pointer to the associated file handle.
 
-
 int get_process_exitcode(pid_t);
 void set_process_parent(pid_t,pid_t);
 void abandon_children(pid_t);
 void collect_children(void);
+
+void process_cleanup(void);
 
 #endif /* _PROCESS_H_ */

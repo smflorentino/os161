@@ -50,13 +50,13 @@ process_create(const char *name, pid_t parent, struct process **ret)
 		return ENOMEM;
 	}
 
-	process->p_forksem = sem_create(name,0);
-	if(process->p_forksem == NULL) {
-		kfree(process->p_waitsem);
-		kfree(process->p_name);
-		kfree(process);
-		return ENOMEM;
-	}
+	// process->p_forksem = sem_create(name,0);
+	// if(process->p_forksem == NULL) {
+	// 	kfree(process->p_waitsem);
+	// 	kfree(process->p_name);
+	// 	kfree(process);
+	// 	return ENOMEM;
+	// }
 
 	processtable_biglock_acquire();
 	pid_t pid;
@@ -108,15 +108,15 @@ init_process_create(const char *name)
 		return NULL;
 	}
 
-	process->p_forksem = sem_create(name,0);
-	if(process->p_forksem == NULL) {
-		// lock_destroy(process->p_waitlock);
-		// cv_destroy(process->p_waitcv);
-		kfree(process->p_waitsem);
-		kfree(process->p_name);
-		kfree(process);
-		return NULL;
-	}
+	// process->p_forksem = sem_create(name,0);
+	// if(process->p_forksem == NULL) {
+	// 	// lock_destroy(process->p_waitlock);
+	// 	// cv_destroy(process->p_waitcv);
+	// 	kfree(process->p_waitsem);
+	// 	kfree(process->p_name);
+	// 	kfree(process);
+	// 	return NULL;
+	// }
 
 	processtable_biglock_acquire();
 	// process->p_id = allocate_pid();
@@ -203,7 +203,7 @@ process_destroy(pid_t pid)
 	kfree(process->p_name);
 	// lock_destroy(process->p_waitlock);
 	sem_destroy(process->p_waitsem);
-	sem_destroy(process->p_forksem);
+	// sem_destroy(process->p_forksem);
 	// cv_destroy(process->p_waitcv);
 	//processlist_cleanup(&process->p_waiters);
 	kfree(process);
@@ -215,6 +215,7 @@ process_destroy(pid_t pid)
 	{
 		processtable_biglock_release();
 	}
+	// kprintf("Cleaning process%d\n",pid);
 }
 
 struct process *
