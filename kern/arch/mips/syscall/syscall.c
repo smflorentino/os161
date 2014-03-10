@@ -332,18 +332,19 @@ console_init()
 	DEBUG(DB_WRITE,"Getting console vnode...");
 	//path, openflags (O_WRONLY), mode (ignored b/c no permissions), vnode
 	
-	struct thread *cur = curthread;
-	struct process *proc = get_process(cur->t_pid);
-	// Get a file handle and file object pointers
-	struct file_handle *fh = file_handle_create(conname);
-	struct file_object *fo = fo_create(conname);
-	fo->fo_vnode = console;
+	//struct thread *cur = curthread;
+	//struct process *proc = get_process(cur->t_pid);
+	//struct file_handle *fh = fh_create(conname, O_WRONLY);
+	//struct file_object *fo = fo_create(conname);
+	//fo->fo_vnode = console;
 
-	result = vfs_open(conname,O_WRONLY,0,&fo->fo_vnode);
+	result = vfs_open(conname,O_RDWR,0,&console_out);
 
 	// vfs_biglock_release();
-	KASSERT(fo->fo_vnode != NULL);
+	KASSERT(console_out != NULL);
 	KASSERT(result == 0);
+	//fh->fh_file_object = fo;
+	//proc->p_fd_table[1] = fh;
 	return result;
 
 	/*Not sure if we can just keep reusing the static vnode console
@@ -375,7 +376,7 @@ int
 sys_open(char* filename, int flags, int *retval)
 {
 
-	//kprintf("Inside sys_open\n");
+	kprintf("Inside sys_open\n");
 
 	// Get current thread and current process
 	struct thread *cur = curthread;
@@ -459,20 +460,18 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 		return EFAULT;
 	}
 
-	struct vnode* device;
+	struct vnode *device;
 	struct iovec iov;
 	struct uio u;
 	int result;
-		struct thread *cur = curthread;
-		struct process *proc = get_process(cur->t_pid);
-		struct file_handle *fh = get_file_handle(proc->p_id, fd);
-
+	struct thread *cur = curthread;
+	struct process *proc = get_process(cur->t_pid);
+	struct file_handle *fh = get_file_handle(proc->p_id, fd);
 
 	//Write to Standard Out or Standard Err
 	if(fd == STDOUT_FILENO || fd == STDERR_FILENO)
 	{
-		//KASSERT(console != NULL);
-		device = console;
+		device = console_out;
 		u.uio_offset = 0; //Start at the beginning
 	}
 	else 
@@ -510,8 +509,6 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	//resid amount of data remaining to transfer. nbytes the amount of data we need to write.
 	//Our write succeeded. Per the man pages, return the # of bytes written (might not be everything)
 	*retval = nbytes - u.uio_resid;
-
-
 	if(fd == STDOUT_FILENO || fd == STDERR_FILENO)
 	{
 		return 0;
@@ -521,7 +518,6 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 		fh->fh_offset = u.uio_offset;
 	}
 	return 0;
-
 }
 
 
