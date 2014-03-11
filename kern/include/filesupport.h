@@ -38,7 +38,7 @@ void fo_vnode_lock_release(void);
 bool fo_vnode_lock_do_i_hold(void);
 
 // Check if the file handle exists yet, or not. Return index int if it does or -1 if it doesn't.
-int check_file_object_list(char*);
+int check_file_object_list(char*, int*);
 void file_object_list_init(void);
 
 /* File Handle Structure */

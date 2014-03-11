@@ -30,7 +30,8 @@
 #ifndef _SYSCALL_H_
 #define _SYSCALL_H_
 
-
+//extern struct vnode* console;
+//extern char conname[] = "con:";
 struct trapframe; /* from <machine/trapframe.h> */
 
 /*

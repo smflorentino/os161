@@ -224,9 +224,10 @@ kmain(char *arguments)
 	boot();
 	
 	//kprintf("scottflo cjowen\n");
-	init_process_create("init");
 	file_object_list_init();
+	init_process_create("init");
 	console_init();
+
 	DEBUG(DB_EXEC, "Finished boot()");
 
 	menu(arguments);

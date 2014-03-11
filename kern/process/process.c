@@ -75,8 +75,15 @@ process_create(const char *name, pid_t parent, struct process **ret)
 
 	// To Do: initialize fd array to have 0 thru 2 point to stdin, stdout, stderr.
 	// All other pointers to NULL.
+	// Copy over the file descriptors
+	struct process *parent_p = get_process(parent);
+
 	for(int i = 0; i < FD_MAX; i++) {
-		process->p_fd_table[i] = NULL;
+		process->p_fd_table[i] = parent_p->p_fd_table[i];
+		// Increment the file handle open count if valid.
+		if(process->p_fd_table[i] != NULL) {
+			process->p_fd_table[i]->fh_open_count++;
+		}
 	}
 
 	*ret = process;
@@ -134,6 +141,8 @@ init_process_create(const char *name)
 	for(int i = 0; i < FD_MAX; i++) {
 		process->p_fd_table[i] = NULL;
 	}
+
+
 
 	// Clear out the file object list for the first and only time.
 	//file_object_list_init();

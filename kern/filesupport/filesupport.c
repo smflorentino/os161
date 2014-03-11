@@ -99,16 +99,23 @@
 	// Searches the file object list array for a fo with a particular name.
 	// Returns index value for fo if it exists; returns -1 if it does not.
 	int
-	check_file_object_list(char *filename)
+	check_file_object_list(char *filename, int *free_index)
 	{
-		(void)filename;
+		//(void)filename;
+		bool found_free = false;
 		
 		struct file_object *fo;
 		fo_vnode_lock_acquire();
 		for(int i = 0; i < FO_MAX; i++) {
 			fo = file_object_list[i];
+			// Find a free index, incase we need to add a file object.
+			if((fo == NULL) && (!found_free)) {
+				found_free = true;
+				*free_index = i;
+			}
+			// See if our desired file object already exists.
 			if((fo != NULL) && (strcmp(fo->fo_name,filename) == 0)) {
-				// File object already exists, bass back its index.
+				// File object already exists, pass back its index.
 				fo_vnode_lock_release();
 				return i;
 			}
