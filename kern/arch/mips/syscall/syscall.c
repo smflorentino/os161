@@ -340,10 +340,10 @@ console_init()
 	//struct file_object *fo = fo_create(conname);
 	//fo->fo_vnode = console;
 
-	result = vfs_open(conname,O_RDWR,0,&console_out);
+	result = vfs_open(conname,O_RDWR,0,&console);
 
 	// vfs_biglock_release();
-	KASSERT(console_out != NULL);
+	KASSERT(console != NULL);
 	KASSERT(result == 0);
 	//fh->fh_file_object = fo;
 	//proc->p_fd_table[1] = fh;
@@ -473,7 +473,7 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	//Write to Standard Out or Standard Err
 	if(fd == STDOUT_FILENO || fd == STDERR_FILENO)
 	{
-		device = console_out;
+		device = console;
 		u.uio_offset = 0; //Start at the beginning
 	}
 	else 
