@@ -656,16 +656,9 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 		//kprintf("Buffer pointer is bad.\n");
 		return EBADF;
 	}
-	//Check if buffer pointer is vald
-	char kbuf[buflen];
-	result = copyin((const_userptr_t) buf,(void*) kbuf,buflen);
-	if(result)
-	{
-		return result;
-	}
 
 	// Initialize iov and uio
-	iov.iov_ubase = (userptr_t) kbuf;		//User Data(copied into kernel) pointer is the buffer
+	iov.iov_ubase = (userptr_t) buf;		//User Data(copied into kernel) pointer is the buffer
 	iov.iov_len = buflen; 					//The lengeth is the number of bytes passed in
 	u.uio_iov = &iov; 
 	u.uio_iovcnt = 1; 						//Only 1 iovec
@@ -676,11 +669,13 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 	u.uio_space = curthread->t_addrspace;	//Get address space from curthread (is this right?)
 	
 	result = VOP_READ(fo->fo_vnode, &u);
+
 	if (result) {
 		//kprintf("\nRead opreation failed.\n");
-		return EIO;
+		return result;
+		// return EIO;1
 	}
-
+	
 	// Determine bytes read.
 	//bytes_read = u.uio_offset - fh->fh_offset;
 	// Update file offset in file handle.

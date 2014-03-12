@@ -109,6 +109,8 @@ kill_curthread(vaddr_t epc, unsigned code, vaddr_t vaddr)
 		break;
 	}
 
+	pid_t curpid = curthread->t_pid;
+	process_exit(curpid,0);
 	/*
 	 * You will probably want to change this.
 	 */
