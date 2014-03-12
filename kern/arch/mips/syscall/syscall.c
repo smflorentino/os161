@@ -414,6 +414,24 @@ check_open_fd(int fd, struct process* proc)
 	return 0;
 }
 
+/* Check if a  user-supplied pointer is valid.
+ * We do this by dereferencing the pointer and copying
+ * in a single byte. We can do this because we're 
+ * protected by the copyin logic
+ */
+ static
+ int
+ check_userptr(const_userptr_t ptr)
+ {
+ 	char kbuf;
+ 	int err = copyin(ptr, &kbuf,1);
+ 	if(err)
+ 	{
+ 		return err;
+ 	}
+ 	return 0;
+ }
+
 /* The write() System call
  * Calls the following function:
  *
@@ -448,8 +466,7 @@ sys_open(char* filename, int flags, int *retval)
 		return EFAULT;
 	}
 	//Check if filename is a valid pointer by attempting to dereference it and copy a single byte.
-	char kfilename;
-	result = copyin( (const_userptr_t) filename, &kfilename, 1);
+	result = check_userptr((const_userptr_t) filename);
 	if(result)
 	{
 		return result;
@@ -537,8 +554,7 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 		return EFAULT;
 	}
 	//Check buffer is a valid pointer by attempting to dereference it and copy a single byte.
-	char kbuf;
-	int result = copyin( (const_userptr_t) buf, &kbuf, 1);
+	int result = check_userptr( (const_userptr_t) buf);
 	if(result)
 	{
 		return result;
@@ -566,10 +582,11 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	struct thread *cur = curthread;
 	struct process *proc = get_process(cur->t_pid);
 	struct file_handle *fh = get_file_handle(proc->p_id, fd);
-	//fd might be positive, but it could have been bad. Check here:
-	if( fh == NULL)
+	//Make sure fd refers to an open file (i.e. it's valid to write to)
+	result = check_open_fd(fd,proc);
+	if(result)
 	{
-		return EBADF;
+		return result;
 	}
 	struct file_object *fo = fh->fh_file_object;
 
@@ -705,8 +722,7 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 		return EFAULT;
 	}
 	//Check buffer is a valid pointer by attempting to dereference it and copy a single byte.
-	char kbuf;
-	result = copyin( (const_userptr_t) buf, &kbuf, 1);
+	result = check_userptr( (const_userptr_t) buf);
 	if(result)
 	{
 		return result;
@@ -717,10 +733,11 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 	struct thread *cur = curthread;
 	struct process *proc = get_process(cur->t_pid);
 	struct file_handle *fh = get_file_handle(proc->p_id, fd);
-	//fd might be positive, but it could still be bad. Check here:
-	if( fh == NULL)
+	//Make sure fd refers to an open file (i.e. it's valid to read)
+	result = check_open_fd(fd,proc);
+	if(result)
 	{
-		return EBADF;
+		return result;
 	}
 	struct file_object *fo = fh->fh_file_object;
 	//int bytes_read = 0;
@@ -787,19 +804,21 @@ sys_close(int fd)
 	//(void)filename;
 	//kprintf("Inside sys_close\n");
 	//Check if fd is valid (part one :) )
-	if(fd < 0 || fd > OPEN_MAX)
+	int result = check_valid_fd(fd);
+	if(result)
 	{
-		return EBADF;
+		return result;
 	}
 	// Get current thread and current process
 	struct thread *cur = curthread;
 	struct process *proc = get_process(cur->t_pid);
 	// Get a file handle and file object pointers
 	struct file_handle *fh = get_file_handle(proc->p_id, fd);
-	//fd might be positive, but it could still be bad. Check here (part 2)
-	if( fh == NULL)
+	//Make sure fd refers to an open file (i.e. it's valid to close)
+	result = check_open_fd(fd,proc);
+	if(result)
 	{
-		return EBADF;
+		return result;
 	}
 	struct file_object *fo = fh->fh_file_object;
 
@@ -942,8 +961,7 @@ sys_chdir(const char* pathname, int* retval)
 	char *cd = (char*)pathname;
 
 	//Check if pathname is a valid pointer by attempting to dereference it and copy a single byte.
-	char kpathname;
-	result = copyin( (const_userptr_t) pathname, &kpathname, 1);
+	result = check_userptr( (const_userptr_t) pathname);
 	if(result)
 	{
 		return result;
@@ -1155,14 +1173,19 @@ sys_execv(const char* program, char** args, int* retval)
 		//An empty program string was passed into execv, return EINVAL
 		return EINVAL;
 	}
-	char kargs;
-	// const_userptr_t uargs = (void*) args;
-	result = copyin( (const_userptr_t) args, &kargs, 1);
+	result = check_userptr( (const_userptr_t) args);
 	if(result)
 	{
-		//args pointer was invalid, return error
 		return result;
 	}
+	// char kargs;
+	// // const_userptr_t uargs = (void*) args;
+	// result = copyin( (const_userptr_t) args, &kargs, 1);
+	// if(result)
+	// {
+	// 	//args pointer was invalid, return error
+	// 	return result;
+	// }
 
 	// do {
 	// 	result = copyin((userptr_t) program,&curchar,sizeof(char));
