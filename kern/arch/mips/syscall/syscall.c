@@ -1017,8 +1017,9 @@ sys_execv(const char* program, char** args, int* retval)
 		//An empty program string was passed into execv, return EINVAL
 		return EINVAL;
 	}
-	void* kargs;
-	result = copyin((const_userptr_t) args, kargs, sizeof(void*));
+	char kargs;
+	// const_userptr_t uargs = (void*) args;
+	result = copyin( (const_userptr_t) args, &kargs, 1);
 	if(result)
 	{
 		//args pointer was invalid, return error
