@@ -390,6 +390,30 @@ console_init()
 	*/
 }
 
+/* Check if a file descriptor is valid*/
+static
+int
+check_valid_fd(int fd)
+{
+	if(fd < 0 || fd >= OPEN_MAX)
+	{
+		return EBADF;
+	}
+	return 0;	
+}
+
+/* Check if a file descriptor is open */
+static
+int
+check_open_fd(int fd, struct process* proc)
+{
+	if(proc->p_fd_table[fd] == NULL)
+	{
+		return EBADF;
+	}
+	return 0;
+}
+
 /* The write() System call
  * Calls the following function:
  *
@@ -502,7 +526,23 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	//kprintf("\nParameter 2:%s", (char*) buf);
 	//kprintf("\nParameter 3:%d", nbytes);
 
-	///*
+	//Check if fd is valid (part one :) )
+	if(fd < 0 || fd > OPEN_MAX)
+	{
+		return EBADF;
+	}
+	//Check if buffer is NULL:
+	if(buf == NULL)
+	{
+		return EFAULT;
+	}
+	//Check buffer is a valid pointer by attempting to dereference it and copy a single byte.
+	char kbuf;
+	int result = copyin( (const_userptr_t) buf, &kbuf, 1);
+	if(result)
+	{
+		return result;
+	}
 	
 	//kprintf("File Descriptor is %d.\n", fd);
 	//Can't write to Standard In
@@ -523,10 +563,14 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	//struct vnode *device;
 	struct iovec iov;
 	struct uio u;
-	int result;
 	struct thread *cur = curthread;
 	struct process *proc = get_process(cur->t_pid);
 	struct file_handle *fh = get_file_handle(proc->p_id, fd);
+	//fd might be positive, but it could have been bad. Check here:
+	if( fh == NULL)
+	{
+		return EBADF;
+	}
 	struct file_object *fo = fh->fh_file_object;
 
 	//Write to Standard Out or Standard Err
@@ -650,14 +694,34 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 	(void)buflen;
 	(void)retval;
 	*/
-
+	int result = check_valid_fd(fd);
+	if(result)
+	{
+		return result;
+	}
+	//Check if buffer is NULL:
+	if(buf == NULL)
+	{
+		return EFAULT;
+	}
+	//Check buffer is a valid pointer by attempting to dereference it and copy a single byte.
+	char kbuf;
+	result = copyin( (const_userptr_t) buf, &kbuf, 1);
+	if(result)
+	{
+		return result;
+	}
 	//Variables and structs
 	struct iovec iov;
 	struct uio u;
-	int result;
 	struct thread *cur = curthread;
 	struct process *proc = get_process(cur->t_pid);
 	struct file_handle *fh = get_file_handle(proc->p_id, fd);
+	//fd might be positive, but it could still be bad. Check here:
+	if( fh == NULL)
+	{
+		return EBADF;
+	}
 	struct file_object *fo = fh->fh_file_object;
 	//int bytes_read = 0;
 
@@ -671,7 +735,6 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 		return EBADF;
 	}
 	*/
-
 	//First check that the specified file is open for reading.
 
 	if(!(fh->fh_flags & (O_RDWR|O_RDONLY)))
@@ -723,12 +786,21 @@ sys_close(int fd)
 {
 	//(void)filename;
 	//kprintf("Inside sys_close\n");
-
+	//Check if fd is valid (part one :) )
+	if(fd < 0 || fd > OPEN_MAX)
+	{
+		return EBADF;
+	}
 	// Get current thread and current process
 	struct thread *cur = curthread;
 	struct process *proc = get_process(cur->t_pid);
 	// Get a file handle and file object pointers
 	struct file_handle *fh = get_file_handle(proc->p_id, fd);
+	//fd might be positive, but it could still be bad. Check here (part 2)
+	if( fh == NULL)
+	{
+		return EBADF;
+	}
 	struct file_object *fo = fh->fh_file_object;
 
 	// Check if fd is not a valid file descriptor.
@@ -757,7 +829,11 @@ sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
 	//(void)fd;
 	//(void)pos;
 	//(void)whence;
-	
+	//Check if fd is valid (part one :) )
+	if(fd < 0 || fd > OPEN_MAX)
+	{
+		return EBADF;
+	}
 	//kprintf("Inside lseek.\n");
 	//kprintf("fd = %d.\n", fd);
 	struct thread *cur = curthread;
@@ -766,10 +842,18 @@ sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
 		//kprintf("File descriptor is not valid for seeking.\n");
 		return EBADF;
 	}
-
 	struct file_handle *fh = get_file_handle(proc->p_id, fd);
+	//fd might be positive, but it could still be bad. Check here:
+	if( fh == NULL)
+	{
+		return EBADF;
+	}
 	struct file_object *fo = fh->fh_file_object;
-	
+	/* If vnode fs is null, most likely vnode refers to device*, per vnode.h*/
+	if(fo->fo_vnode->vn_fs == NULL)
+	{
+		return ESPIPE;
+	}
 	// Get the file stats so we can determine file size if needed.
 	struct stat file_stat;
 	int result;
@@ -813,8 +897,22 @@ sys_dup2(int oldfd, int newfd, int* retval)
 {
 	//(void)oldfd;
 	//(void)newfd;
+	int result = check_valid_fd(oldfd);
+	if(result)
+	{
+		return result;
+	}
+	result = check_valid_fd(newfd);
+	if(result)
+	{
+		return result;
+	}
 	struct process *proc = get_process(curthread->t_pid);
-
+	result = check_open_fd(oldfd, proc);
+	if(result)
+	{
+		return result;
+	}
 	if(proc->p_fd_table[newfd] != NULL) {
 		//Close the open file handle and descriptor.
 		// Check if fd is not a valid file descriptor.
@@ -842,6 +940,14 @@ sys_chdir(const char* pathname, int* retval)
 	//(void)pathname;
 	int result;
 	char *cd = (char*)pathname;
+
+	//Check if pathname is a valid pointer by attempting to dereference it and copy a single byte.
+	char kpathname;
+	result = copyin( (const_userptr_t) pathname, &kpathname, 1);
+	if(result)
+	{
+		return result;
+	}
 
 	if(pathname == NULL) {
 		// Pathname is an invalid pointer.
@@ -1179,3 +1285,4 @@ sys_execv(const char* program, char** args, int* retval)
 	(void)retval;
 	return 0;
 }
+
