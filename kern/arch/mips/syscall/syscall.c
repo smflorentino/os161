@@ -362,10 +362,12 @@ console_init()
 	proc->p_fd_table[STDOUT_FILENO] = fh_stdout;
 	proc->p_fd_table[STDERR_FILENO] = fh_stderr;
 
+	/*
 	kprintf("First process: %s \n", proc->p_name);
 	kprintf("STDIN: %s \n", proc->p_fd_table[STDIN_FILENO]->fh_file_object->fo_name);
 	kprintf("STDOUT: %s \n", proc->p_fd_table[STDOUT_FILENO]->fh_file_object->fo_name);
 	kprintf("STDERR: %s \n", proc->p_fd_table[STDERR_FILENO]->fh_file_object->fo_name);
+	*/
 	//fo->fo_vnode = console;
 
 
@@ -609,7 +611,7 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 
 
 int
-1(int fd, const void* buf, size_t buflen, int* retval)
+sys_read(int fd, const void* buf, size_t buflen, int* retval)
 {
 	/*
 	(void)fd;
@@ -639,6 +641,7 @@ int
 	}
 	*/
 	//First check that the specified file is open for reading.
+
 	if(!(fh->fh_flags & (O_RDWR|O_RDONLY)))
 	{
 		if(fh->fh_flags != O_RDONLY)
@@ -646,6 +649,11 @@ int
 			return EBADF;
 		}
 	}
+	//if(!(fh->fh_flags & (O_RDONLY|O_RDWR)))
+	//{
+	//	//kprintf("File is not open for reading.\n");
+	//	return EBADF;
+	//}
 
 	// Check that buffer pointer is valid.
 	if(buf == NULL)
@@ -774,9 +782,28 @@ sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
 int
 sys_dup2(int oldfd, int newfd, int* retval)
 {
-	(void)oldfd;
-	(void)newfd;
-	*retval = 0;
+	//(void)oldfd;
+	//(void)newfd;
+	struct process *proc = get_process(curthread->t_pid);
+
+	if(proc->p_fd_table[newfd] != NULL) {
+		//Close the open file handle and descriptor.
+		// Check if fd is not a valid file descriptor.
+		// Call vfs_close().
+		vfs_close(proc->p_fd_table[newfd]->fh_file_object->fo_vnode);
+
+		// Decrement file handle reference count; if zero, destroy file handle.
+		proc->p_fd_table[newfd]->fh_open_count -= 1;
+		if(proc->p_fd_table[newfd]->fh_open_count == 0) {
+		fh_destroy(proc->p_fd_table[newfd]);
+		}
+		// Free file descriptor; if 0, 1, or 2, reset file descriptor to STDIN, STDOUT, STDERR, respectively.
+		//release_file_descriptor(proc->p_id, fd);
+	}
+
+	proc->p_fd_table[newfd] = proc->p_fd_table[oldfd];
+
+	*retval = newfd;
 	return 0;
 }
 
@@ -971,7 +998,7 @@ sys_execv(const char* program, char** args, int* retval)
 {
 	char kprogram[128]; (void) kprogram;
 	// char* kprogram = (char*) kmalloc(128); (void) kprogram;
-	int bytesCopied = 0;
+	size_t bytesCopied = 0;
 	int result = 0;
 	// char* usrprogram = (char*) program; (void) usrprogram;
 	// const_userptr_t usrprogram = (const_userptr_t) program; (void) usrprogram;
@@ -988,37 +1015,43 @@ sys_execv(const char* program, char** args, int* retval)
 
 	} while(curchar != '\0');
 	// kprintf("Copied in program\n");
-	int count = 0;
+	size_t count = 0;
 	bytesCopied = 0;
 
-	int max = 1024 * 4;
+	size_t max = 1024 * 4;
 	(void)max;
 	// userptr_t curusrarg;
-	// char* curarg;
+	char* curarg;
 	// int* x;
-	// (void)curarg;
-	// kprintf("args0:%s\n",args[0]);
+	(void)curarg;
 
 	char* buf = (char*) kmalloc(max);
+	char** argptrs = kmalloc(max);
 	size_t actual = 0;
+	void* curcharptr;
+	// size_t curptrpos = max-4;
 	while(args[count] != NULL)
 	{
-		result = copyinstr((const_userptr_t) args[count],buf, max-actual,&actual);
+		curcharptr = &buf[bytesCopied];
+		// kprintf("Actual: %d Pos: %d\n",actual,bytesCopied);
+		result = copyinstr((const_userptr_t) args[count], (void*) &buf[bytesCopied], max-actual,&actual);
 		if(result)
 		{	
 			kprintf("copy failed!");
 			return result;
 		}
-		else { kprintf("%d bytes copied\n", actual);}
-		while((max - actual) % 4 != 0)
+		else { kprintf("%d bytes copied\n", actual); bytesCopied += actual;}
+		while((max - bytesCopied) % 4 != 0)
 		{
-			kprintf("padding args[%d]",max-actual);
-			buf[actual] = '\0';
-			actual++;
+			// kprintf("padding args[%d]",actual);
+			buf[bytesCopied] = '\0';
+			bytesCopied++;
 		}
+		//Add arg ptr to arg array:
+		argptrs[count] = curcharptr;
 		count++;
 	}
-	
+	// argptrs[count+1] = NULL;
 	// while(args[count] != NULL)
 	// {
 	// 	//Copy in pointer to current arg..
@@ -1062,21 +1095,29 @@ sys_execv(const char* program, char** args, int* retval)
 	// 	kprintf("%s\n", (char *) &buf[i]);
 	// }
 
-	char* kargs[count+1];
-	int pos = 0;
-	kargs[count] = NULL;
-	for(int j=0;j<count;j++)
-	{
-		kargs[j] = (char*) &buf[pos];
-		while(buf[pos] != '\0')
-		{
-			pos++;
-		}
-	}
+	// char* kargs[count+1];
+	// int pos = 0;
+	// kargs[count] = NULL;
+	// for(size_t j=0;j<count;j++)
+	// {
+	// 	kargs[j] = (char*) &buf[pos];
+	// 	while(buf[pos] != '\0')
+	// 	{
+	// 		pos++;
+	// 	}
+	// }
 	// kprintf("kargs[0]:%s\n", (char*) kargs[0]);
 	// kprintf("kargs[1]:%s\n", (char*) kargs[1]);
-	kfree(buf);
-	runprogram2(&kprogram[0], kargs,count);
+	// kfree(buf);
+	// for(size_t i = 0;i<bytesCopied;i++)
+	// {
+	// 	kprintf("buf[%d]: %c\n",i, (char) buf[i]);
+	// }
+	// for(size_t i = 0;i<count;i++)
+	// {
+	// 	kprintf("ptrs[%d]: %s\n",i, argptrs[i]);
+	// }
+	runprogram2(&kprogram[0], argptrs,count);
 	(void)program;
 	(void)args;
 	(void)retval;

@@ -30,6 +30,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <err.h>
 
 /*
  * true - succeed.
@@ -38,18 +39,59 @@
 int
 main(int argc, char* argv[])
 {
-	for(int i = 0;i<argc;i++)
+	for(int i = 0;i<argc;i++) {
+		printf("argv[%d]: %s\n",i,argv[i]);
+	}
+	if(argc > 1)
+	{
+		exit(0);
+	}
+	/*
+	int fh, len; 
+
+	printf("Opening log file\n");
+	const char * logfile = "log.dat";
+	fh = open(logfile, O_RDWR|O_CREAT|O_TRUNC);
+	if (fh < 0) {
+		err(1, "create failed");
+	}
+
+	int numbers[] = {1, 2, 3, 4, 5};
+	printf("Writing '%d'\n", numbers[2]);
+
+	len = write(fh, numbers, sizeof(numbers));
+	if (len != sizeof(numbers)) {
+		err(1, "write failed");
+	}
+
+	lseek(fh, sizeof(numbers), SEEK_SET);
+
+	static int newnum[5];
+	len = read(fh, newnum, sizeof(newnum));
+	
+	//if (len != sizeof(word)) {
+	//	err(1, "read failed");
+	//}
+
+	printf("retrieved: '%d'\n", newnum[2]);
+
+
+	
+	printf("My process ID is: %d\n", getpid());	
+	int pid = fork();
+	if(pid == 0)
 	{
 		printf("arg%d:%s\n",i,argv[i]);
-	}
+	}*/
 	char* arg[2];
-	arg[0] = (char*) "asd";
-	arg[1] = (char*) "yyyyy";
+	arg[0] = (char*) "ddd";
+	arg[1] = (char*) "asdasd";
 	int result = execv("bin/true", arg);
 	if(result)
 	{
 		printf("Exec failed:%d",result);
 	}
+	
 	//Printf with hello world:
 	//This calls the write system call!
 	// // printf("Hello World");
