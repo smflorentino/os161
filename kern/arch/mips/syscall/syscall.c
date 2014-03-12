@@ -362,10 +362,12 @@ console_init()
 	proc->p_fd_table[STDOUT_FILENO] = fh_stdout;
 	proc->p_fd_table[STDERR_FILENO] = fh_stderr;
 
+	/*
 	kprintf("First process: %s \n", proc->p_name);
 	kprintf("STDIN: %s \n", proc->p_fd_table[STDIN_FILENO]->fh_file_object->fo_name);
 	kprintf("STDOUT: %s \n", proc->p_fd_table[STDOUT_FILENO]->fh_file_object->fo_name);
 	kprintf("STDERR: %s \n", proc->p_fd_table[STDERR_FILENO]->fh_file_object->fo_name);
+	*/
 	//fo->fo_vnode = console;
 
 
@@ -639,11 +641,11 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 	}
 	*/
 	//First check that the specified file is open for reading.
-	if(!(fh->fh_flags & (O_RDONLY|O_RDWR)))
-	{
-		//kprintf("File is not open for reading.\n");
-		return EBADF;
-	}
+	//if(!(fh->fh_flags & (O_RDONLY|O_RDWR)))
+	//{
+	//	//kprintf("File is not open for reading.\n");
+	//	return EBADF;
+	//}
 
 	// Check that buffer pointer is valid.
 	if(buf == NULL)
@@ -772,9 +774,28 @@ sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
 int
 sys_dup2(int oldfd, int newfd, int* retval)
 {
-	(void)oldfd;
-	(void)newfd;
-	*retval = 0;
+	//(void)oldfd;
+	//(void)newfd;
+	struct process *proc = get_process(curthread->t_pid);
+
+	if(proc->p_fd_table[newfd] != NULL) {
+		//Close the open file handle and descriptor.
+		// Check if fd is not a valid file descriptor.
+		// Call vfs_close().
+		vfs_close(proc->p_fd_table[newfd]->fh_file_object->fo_vnode);
+
+		// Decrement file handle reference count; if zero, destroy file handle.
+		proc->p_fd_table[newfd]->fh_open_count -= 1;
+		if(proc->p_fd_table[newfd]->fh_open_count == 0) {
+		fh_destroy(proc->p_fd_table[newfd]);
+		}
+		// Free file descriptor; if 0, 1, or 2, reset file descriptor to STDIN, STDOUT, STDERR, respectively.
+		//release_file_descriptor(proc->p_id, fd);
+	}
+
+	proc->p_fd_table[newfd] = proc->p_fd_table[oldfd];
+
+	*retval = newfd;
 	return 0;
 }
 
