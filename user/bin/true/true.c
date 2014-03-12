@@ -36,22 +36,19 @@
  */
 
 int
-main()
+main(int argc, char* argv[])
 {
-	printf("My process ID is: %d\n", getpid());	
-	int pid = fork();
-	if(pid == 0)
+	for(int i = 0;i<argc;i++)
 	{
-		printf("Child PID:%d\n",getpid());
-		printf("Exiting Child\n");
-		exit(550);
+		printf("arg%d:%s\n",i,argv[i]);
 	}
-	else
+	char* arg[2];
+	arg[0] = (char*) "asd";
+	arg[1] = (char*) "yyyyy";
+	int result = execv("bin/true", arg);
+	if(result)
 	{
-		printf("Parent:%d\n",getpid());
-		int exitcode;
-		waitpid(pid,&exitcode,0);
-		printf("Waited Done.\n");
+		printf("Exec failed:%d",result);
 	}
 	//Printf with hello world:
 	//This calls the write system call!
