@@ -1060,10 +1060,10 @@ sys_execv(const char* program, char** args, int* retval)
 		result = copyinstr((const_userptr_t) args[count], (void*) &buf[bytesCopied], max-actual,&actual);
 		if(result)
 		{	
-			kprintf("copy failed!");
+			// kprintf("copy failed!");
 			return result;
 		}
-		else { kprintf("%d bytes copied\n", actual); bytesCopied += actual;}
+		else { /*kprintf("%d bytes copied\n", actual);*/ bytesCopied += actual;}
 		while((max - bytesCopied) % 4 != 0)
 		{
 			// kprintf("padding args[%d]",actual);
