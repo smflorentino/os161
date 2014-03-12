@@ -649,21 +649,23 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 			return EBADF;
 		}
 	}
-	//if(!(fh->fh_flags & (O_RDONLY|O_RDWR)))
-	//{
-	//	//kprintf("File is not open for reading.\n");
-	//	return EBADF;
-	//}
 
-	// Check that buffer pointer is valid.
+	// Check that buffer pointer is not NULL.
 	if(buf == NULL)
 	{
 		//kprintf("Buffer pointer is bad.\n");
 		return EBADF;
 	}
+	//Check if buffer pointer is vald
+	char kbuf[buflen];
+	result = copyin((const_userptr_t) buf,(void*) kbuf,buflen);
+	if(result)
+	{
+		return result;
+	}
 
 	// Initialize iov and uio
-	iov.iov_ubase = (userptr_t) buf;		//User pointer is the buffer
+	iov.iov_ubase = (userptr_t) kbuf;		//User Data(copied into kernel) pointer is the buffer
 	iov.iov_len = buflen; 					//The lengeth is the number of bytes passed in
 	u.uio_iov = &iov; 
 	u.uio_iovcnt = 1; 						//Only 1 iovec
@@ -994,6 +996,7 @@ kern_sys_waitpid(pid_t pid, int* status, int options, int* retval)
 
 /* The exec() system call */
 /* Passes badcall_a (bad execv) */
+/* AKA don't touch me :) */
 int
 sys_execv(const char* program, char** args, int* retval)
 {
@@ -1011,6 +1014,7 @@ sys_execv(const char* program, char** args, int* retval)
 	result = copyinstr((const_userptr_t) program, (void*) kprogram,128,&actual);
 	if(result)
 	{
+		//program pointer was invalid, return error
 		return result;
 	}
 	if(actual <= 1)
@@ -1022,6 +1026,7 @@ sys_execv(const char* program, char** args, int* retval)
 	result = copyin((const_userptr_t) args, kargs, sizeof(void*));
 	if(result)
 	{
+		//args pointer was invalid, return error
 		return result;
 	}
 
