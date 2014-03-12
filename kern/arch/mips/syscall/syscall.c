@@ -401,10 +401,10 @@ console_init()
  * Each read (or write) operation is atomic relative to other I/O to the same file.
 */
 
+/* Passes badcall_c now*/
 int
 sys_open(char* filename, int flags, int *retval)
 {
-
 	//kprintf("Inside sys_open\n");
 
 	// Get current thread and current process
@@ -416,7 +416,36 @@ sys_open(char* filename, int flags, int *retval)
 	int fd;
 	int fo_index; // Index into file object array if it exits; -1 if no object and need to create.
 	int fo_free; 	// Next free index in file object list.
-	int result;
+	int result = 0;
+	
+	//If filename is null, return
+	if(filename == NULL)
+	{
+		return EFAULT;
+	}
+	//Check if filename is a valid pointer by attempting to dereference it and copy a single byte.
+	char kfilename;
+	result = copyin( (const_userptr_t) filename, &kfilename, 1);
+	if(result)
+	{
+		return result;
+	}
+	//File name pointer is valid. Now, check if it's empty:
+	if(strlen(filename) == 0)
+	{
+		return EINVAL;
+	}
+	//Check for invalid flags. Crude, but it works...
+	//Make sure we have one of O_RDONLY, O_WRONLY, O_RDWR
+	if( (0x000000 & flags) > 2)
+	{
+		return EINVAL;
+	}
+	//Now, ensure other flags are present (and no more)
+	if( !( flags < (O_CREAT | O_EXCL | O_TRUNC | O_APPEND | O_RDONLY | O_WRONLY | O_RDWR) ))
+	{
+		return EINVAL;
+	}
 
 	// Find avaiable file descritpor.
 	fd = get_free_file_descriptor(proc->p_id);
@@ -524,7 +553,9 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	u.uio_space = curthread->t_addrspace; //Get address space from curthread (is this right?)
 	
 	//Pass this stuff to VOP_WRITE
+	lock_acquire(fo->fo_vnode_lk);
 	result = VOP_WRITE(fo->fo_vnode, &u);
+	lock_release(fo->fo_vnode_lk);
 	if(result)
 	{
 		//TODO check for nonzero error codes and return something else if needed...
@@ -640,6 +671,7 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 		return EBADF;
 	}
 	*/
+
 	//First check that the specified file is open for reading.
 
 	if(!(fh->fh_flags & (O_RDWR|O_RDONLY)))
@@ -667,9 +699,9 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 	u.uio_segflg = UIO_USERSPACE;			//
 	u.uio_rw = UIO_READ; 					//Operation Type: read 
 	u.uio_space = curthread->t_addrspace;	//Get address space from curthread (is this right?)
-	
+	lock_acquire(fo->fo_vnode_lk);
 	result = VOP_READ(fo->fo_vnode, &u);
-
+	lock_release(fo->fo_vnode_lk);
 	if (result) {
 		//kprintf("\nRead opreation failed.\n");
 		return result;
