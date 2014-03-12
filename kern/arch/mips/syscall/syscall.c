@@ -485,7 +485,7 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	// Check if buffer pointer is valid.
 	if(buf == NULL)
 	{
-		//kprintf("Bad buffer pointer.\n");
+		kprintf("efault in write\n");
 		return EFAULT;
 	}
 
@@ -609,7 +609,7 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 
 
 int
-sys_read(int fd, const void* buf, size_t buflen, int* retval)
+1(int fd, const void* buf, size_t buflen, int* retval)
 {
 	/*
 	(void)fd;
@@ -639,10 +639,12 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 	}
 	*/
 	//First check that the specified file is open for reading.
-	if(!(fh->fh_flags & (O_RDONLY|O_RDWR)))
+	if(!(fh->fh_flags & (O_RDWR|O_RDONLY)))
 	{
-		//kprintf("File is not open for reading.\n");
-		return EBADF;
+		if(fh->fh_flags != O_RDONLY)
+		{
+			return EBADF;
+		}
 	}
 
 	// Check that buffer pointer is valid.
@@ -787,6 +789,7 @@ sys_chdir(const char* pathname, int* retval)
 
 	if(pathname == NULL) {
 		// Pathname is an invalid pointer.
+		kprintf("EFAULT in chdir");
 		return EFAULT;
 	}
 	result = vfs_chdir(cd);
@@ -863,6 +866,7 @@ sys_waitpid(pid_t pid, int* status, int options, int* retval)
 	//Check if status is null
 	if(status == NULL)
 	{
+		kprintf("EFAULT in waitpid");
 		return EFAULT;
 	}
 	//Check if status is an invalid pointer. If so, return err from copyin.
@@ -989,46 +993,69 @@ sys_execv(const char* program, char** args, int* retval)
 
 	int max = 1024 * 4;
 	(void)max;
-	userptr_t curusrarg;
-	char* curarg;
-
+	// userptr_t curusrarg;
+	// char* curarg;
+	// int* x;
+	// (void)curarg;
 	// kprintf("args0:%s\n",args[0]);
 
 	char* buf = (char*) kmalloc(max);
+	size_t actual = 0;
 	while(args[count] != NULL)
 	{
-		//Copy in pointer to current arg..
-		curusrarg = (userptr_t) args[count];
-		result = copyin(curusrarg, (void*) curarg, 4);
+		result = copyinstr((const_userptr_t) args[count],buf, max-actual,&actual);
 		if(result)
-		{
+		{	
+			kprintf("copy failed!");
 			return result;
 		}
-		//Copy in the arg, char by char.
-		do
-		{	
-			if(bytesCopied == max)
-			{
-				return E2BIG;
-			}
-			result = copyin(curusrarg, &curchar, sizeof(char));
-			if(result)
-			{
-				return result;
-			}
-			buf[bytesCopied] = curchar;
-			bytesCopied++;
-			curusrarg++;
-		} while(curchar != '\0');
-		//pad the arg, if needed
-		while(bytesCopied % 4 != 0)
+		else { kprintf("%d bytes copied\n", actual);}
+		while((max - actual) % 4 != 0)
 		{
-			buf[bytesCopied] = '\0';
-			bytesCopied++;
+			kprintf("padding args[%d]",max-actual);
+			buf[actual] = '\0';
+			actual++;
 		}
 		count++;
-
 	}
+	
+	// while(args[count] != NULL)
+	// {
+	// 	//Copy in pointer to current arg..
+	// 	curusrarg = (userptr_t) args[count];
+	// 	// result = copyin((const_userptr_t) args[count], (void*) curarg, 1);
+	// 	result = copyinstr((const_userptr_t) arg[count], curarg, 4)
+	// 	if(result)
+	// 	{
+	// 		kprintf("copy failed!\n");
+	// 		return result;
+	// 	}
+	// 	kprintf("copy worked!");
+	// 	//Copy in the arg, char by char.
+	// 	do
+	// 	{	
+	// 		if(bytesCopied == max)
+	// 		{
+	// 			return E2BIG;
+	// 		}
+	// 		result = copyin(curusrarg, &curchar, sizeof(char));
+	// 		if(result)
+	// 		{
+	// 			return result;
+	// 		}
+	// 		buf[bytesCopied] = curchar;
+	// 		bytesCopied++;
+	// 		curusrarg++;
+	// 	} while(curchar != '\0');
+	// 	//pad the arg, if needed
+	// 	while(bytesCopied % 4 != 0)
+	// 	{
+	// 		buf[bytesCopied] = '\0';
+	// 		bytesCopied++;
+	// 	}
+	// 	count++;
+
+	// }
 
 	// for(int i=0;i<bytesCopied;i++)
 	// {	
