@@ -92,14 +92,14 @@ lseek_file_stdin(void)
 		}
 		return;
 	}
-
+	printf("Passed fork\n");
 	/* child */
 
 	fd = open_testfile(NULL);
 	if (fd<0) {
 		_exit(0);
 	}
-
+	printf("Passed child\n");
 	/* 
 	 * Move file to stdin.
 	 * Use stdin (rather than stdout or stderr) to maximize the
@@ -108,6 +108,7 @@ lseek_file_stdin(void)
 	 * and it will be.)
 	 */
 	fd2 = dup2(fd, STDIN_FILENO);
+	printf("Passed dup2\n");
 	if (fd2<0) {
 		warn("UH-OH: dup2 to stdin failed");
 		close(fd);
@@ -128,7 +129,7 @@ lseek_file_stdin(void)
 		remove(TESTFILE);
 		_exit(0);
 	}
-
+	printf("Passed write\n");
 	if ((unsigned)rv != len) {
 		warnx("UH-OH: write to %s (via stdin) got short count",
 		      TESTFILE);
@@ -241,7 +242,9 @@ test_lseek(void)
 	test_lseek_fd();
 
 	lseek_fd_device();
+	printf("Passed fd device\n");
 	lseek_file_stdin();
+	printf("Passed stdin\n");
 	lseek_loc_negative();
 	lseek_loc_pasteof();
 	lseek_whence_inval();

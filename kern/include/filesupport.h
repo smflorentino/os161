@@ -11,6 +11,7 @@
 
 // The file object list. Used to point to all file objects on the system.
 extern struct file_object* file_object_list[FO_MAX];
+extern struct lock* fo_list_lock;
 
 // Global array of file object pointers.
 // TODO: initialize all pointer to NULL at boot time.
@@ -39,7 +40,7 @@ bool fo_vnode_lock_do_i_hold(void);
 
 // Check if the file handle exists yet, or not. Return index int if it does or -1 if it doesn't.
 int check_file_object_list(char*, int*);
-void file_object_list_init(void);
+int file_object_list_init(void);
 
 /* File Handle Structure */
 struct file_handle {

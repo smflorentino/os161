@@ -321,7 +321,6 @@ enter_forked_process(void *tf, unsigned long parentpid)
 
 static struct vnode* console;
 static char conname[] = "con:";
-// static const char* condevname = "con";
 
 /* Initialization Functions */
 
@@ -330,12 +329,12 @@ int
 console_init()
 {
 	int result;
-	//Get the Console vnode
-	// vfs_biglock_acquire();
+
 	DEBUG(DB_WRITE,"Getting console vnode...");
-	//path, openflags (O_WRONLY), mode (ignored b/c no permissions), vnode
+
+	// No need for a lock, since we are doing this during boot time.
 	result = vfs_open(conname,O_RDWR,0,&console);
-	// vfs_biglock_release();
+
 	KASSERT(console != NULL);
 	KASSERT(result == 0);
 	
@@ -363,31 +362,7 @@ console_init()
 	proc->p_fd_table[STDOUT_FILENO] = fh_stdout;
 	proc->p_fd_table[STDERR_FILENO] = fh_stderr;
 
-	/*
-	kprintf("First process: %s \n", proc->p_name);
-	kprintf("STDIN: %s \n", proc->p_fd_table[STDIN_FILENO]->fh_file_object->fo_name);
-	kprintf("STDOUT: %s \n", proc->p_fd_table[STDOUT_FILENO]->fh_file_object->fo_name);
-	kprintf("STDERR: %s \n", proc->p_fd_table[STDERR_FILENO]->fh_file_object->fo_name);
-	*/
-	//fo->fo_vnode = console;
-
-
-	//fh->fh_file_object = fo;
-	//proc->p_fd_table[0] = fh;
 	return result;
-
-	/*Not sure if we can just keep reusing the static vnode console
-	after we get it once. Nor do I have any clue on whether this vnode
-	is thread-safe (it probably isn't, but who knows)
-	So here is the code that uses vfs_root, in case we need it. Again
-	not sure what is right but this seemed to work...
-
-	//Get a Console vnode (CALL THIS AFTER vfs_open was already called)
-	vfs_biglock_acquire();
-	result = vfs_getroot(condevname, &console);
-	kprintf("\n Tried to get the console again: %d", result);
-	vfs_biglock_release();
-	*/
 }
 
 /* Check if a file descriptor is valid*/
@@ -432,31 +407,17 @@ check_open_fd(int fd, struct process* proc)
  	return 0;
  }
 
-/* The write() System call
- * Calls the following function:
- *
- *    vop_write       - Write data from uio to file at offset specified
- *                      in the uio, updating uio_resid to reflect the
- *                      amount written, and updating uio_offset to match.
- *                      Not allowed on directories or symlinks.
- * Per the man pages:
- * Each read (or write) operation is atomic relative to other I/O to the same file.
-*/
-
 /* Passes badcall_c now*/
 int
 sys_open(char* filename, int flags, int *retval)
 {
-	//kprintf("Inside sys_open\n");
 
-	// Get current thread and current process
 	struct thread *cur = curthread;
 	struct process *proc = get_process(cur->t_pid);
-	// Get a file handle and file object pointers
 	struct file_handle *fh;
 	struct file_object *fo;
 	int fd;
-	int fo_index; // Index into file object array if it exits; -1 if no object and need to create.
+	int fo_index; 	// Index into file object array if it exits; -1 if no object and need to create.
 	int fo_free; 	// Next free index in file object list.
 	int result = 0;
 	
@@ -478,7 +439,7 @@ sys_open(char* filename, int flags, int *retval)
 	}
 	//Check for invalid flags. Crude, but it works...
 	//Make sure we have one of O_RDONLY, O_WRONLY, O_RDWR
-	if( (0x000000 & flags) > 2)
+	if( (O_ACCMODE & flags) > 2)
 	{
 		return EINVAL;
 	}
@@ -505,10 +466,18 @@ sys_open(char* filename, int flags, int *retval)
 
 	// Check if file object exists already.
 	fo_index = check_file_object_list(filename, &fo_free);
-	if(fo_index < 0) {
+	if((fo_index < 0) && (O_CREAT & flags)) {
 		// If it doesnt exist, create a new file object.
 		fo = fo_create(filename);
 		file_object_list[fo_free] = fo;
+	}
+	else if((fo_index < 0) && !(O_CREAT & flags)) {
+		// No file object and create wasnt flagged, so exit.
+		return ENOENT;
+	}
+	else if((fo_index >= 0) && ((O_CREAT|O_EXCL) & flags)) {
+		// Create and excl selected, but file exists so exit.
+		return EEXIST;
 	}
 	else {
 		// If it exits, link to it in file handle.
@@ -531,20 +500,16 @@ sys_open(char* filename, int flags, int *retval)
 	return 0;
 }
 
-//0 stdin
-//1 stdout
-//2 stderr
 int
 sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 {
-	//DEBUG(DB_THREADS, "\nCur thread name: %s\n",curthread->t_name);
-	//DEBUG(DB_THREADS, "Cur thread info %p\n", curthread);
-	//kprintf("\nParameter 1:%d",fd);
-	//kprintf("\nParameter 2:%s", (char*) buf);
-	//kprintf("\nParameter 3:%d", nbytes);
+	struct iovec iov;
+	struct uio u;
+	struct thread *cur = curthread;
+	struct process *proc = get_process(cur->t_pid);
 
-	//Check if fd is valid (part one :) )
-	if(fd < 0 || fd > OPEN_MAX)
+	//Check if fd is outside valid range (part one :) )
+	if(fd < 0 || fd >= FD_MAX)
 	{
 		return EBADF;
 	}
@@ -559,58 +524,44 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	{
 		return result;
 	}
-	
-	//kprintf("File Descriptor is %d.\n", fd);
-	//Can't write to Standard In
-	
-	if(fd == STDIN_FILENO)
-	{
-		//kprintf("File descriptor is %d.\n",fd);
-		return EBADF;
-	}
-	
-
-	// Check if buffer pointer is valid.
-	if(buf == NULL)
-	{
-		return EFAULT;
-	}
-
-	//struct vnode *device;
-	struct iovec iov;
-	struct uio u;
-	struct thread *cur = curthread;
-	struct process *proc = get_process(cur->t_pid);
-	struct file_handle *fh = get_file_handle(proc->p_id, fd);
-	//Make sure fd refers to an open file (i.e. it's valid to write to)
+	// Check if the fd has a file handle attached to it.
 	result = check_open_fd(fd,proc);
 	if(result)
 	{
 		return result;
 	}
+	// fd seems legit, now start checking the file handle
+	struct file_handle *fh = get_file_handle(proc->p_id, fd);
+	// Check that file flags allow for writing.
+	if((fh->fh_flags & O_ACCMODE) == 0) {
+		return EBADF;
+	}
+
 	struct file_object *fo = fh->fh_file_object;
 
-	//Write to Standard Out or Standard Err
-	//if( strcmp(fo->fo_name, "con:") == 0)
-	//{
-	//	u.uio_offset = 0; 			//Start at the beginning
-	//}
-	//else 
-	//{
-		u.uio_offset = fh->fh_offset; 	//Start at the offset
-	//}
 	//TODO handle when fd is an actual file...
 
+	if(fh->fh_flags & O_APPEND) {
+		// Append mode; jump to end of file.
+		struct stat file_stat;
+		result = VOP_STAT(fo->fo_vnode, &file_stat);
+		fh->fh_offset = file_stat.st_size;
+	}
+	else if(fh->fh_flags & O_TRUNC) {
+		// Truncate; offset returned to zero on each write.
+		fh->fh_offset = 0;
+	}
+
 	//Create an iovec struct.
-	iov.iov_ubase = (userptr_t) buf; //User pointer is the buffer
-	iov.iov_len = nbytes; //The lengeth is the number of bytes passed in
+	iov.iov_ubase = (userptr_t) buf; 	//User pointer is the buffer
+	iov.iov_len = nbytes; 				//The lengeth is the number of bytes passed in
 	//Create a uio struct, too.
 	u.uio_iov = &iov; 
-	u.uio_iovcnt = 1; //Only 1 iovec (the one we created above)
-	// u.uio_offset = 0; //Start at the beginning
-	u.uio_resid = nbytes; //Amount of data remaining to transfer (all of it)
+	u.uio_iovcnt = 1; 					//Only 1 iovec (the one we created above)
+	u.uio_offset = fh->fh_offset; 		//Start at the offset
+	u.uio_resid = nbytes; 				//Amount of data remaining to transfer (all of it)
 	u.uio_segflg = UIO_USERSPACE;
-	u.uio_rw = UIO_WRITE; //Operation Type: write 
+	u.uio_rw = UIO_WRITE; 				//Operation Type: write 
 	u.uio_space = curthread->t_addrspace; //Get address space from curthread (is this right?)
 	
 	//Pass this stuff to VOP_WRITE
@@ -620,97 +571,23 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	if(result)
 	{
 		//TODO check for nonzero error codes and return something else if needed...
-		//return proper error code
-		return EIO;
+		return result;
 	}
 
-
-
-	//resid amount of data remaining to transfer. nbytes the amount of data we need to write.
 	//Our write succeeded. Per the man pages, return the # of bytes written (might not be everything)
 	*retval = nbytes - u.uio_resid;
-	//if(fd == STDOUT_FILENO || fd == STDERR_FILENO)
-	//{
-	//	return 0;
-	//}
-	//else
-	//{
-		fh->fh_offset = u.uio_offset;
-	//}
+
+	// Update file handle offset
+	fh->fh_offset = u.uio_offset;
+
 	return 0;
-
-	/*
-	struct vnode *device;
-	struct iovec iov;
-	struct uio u;
-	int result;
-	struct thread *cur = curthread;
-	struct process *proc = get_process(cur->t_pid);
-	struct file_handle *fh = get_file_handle(proc->p_id, fd);
-
-	//Write to Standard Out or Standard Err
-	if(fd == STDOUT_FILENO || fd == STDERR_FILENO)
-	{
-		device = console;
-		u.uio_offset = 0; //Start at the beginning
-	}
-	else 
-	{
-
-		struct file_object *fo = fh->fh_file_object;
-		device = fo->fo_vnode;
-		u.uio_offset = fh->fh_offset; //Start at the beginning
-	}
-	//TODO handle when fd is an actual file...
-
-	//Create an iovec struct.
-	iov.iov_ubase = (userptr_t) buf; //User pointer is the buffer
-	iov.iov_len = nbytes; //The lengeth is the number of bytes passed in
-	//Create a uio struct, too.
-	u.uio_iov = &iov; 
-	u.uio_iovcnt = 1; //Only 1 iovec (the one we created above)
-	// u.uio_offset = 0; //Start at the beginning
-	u.uio_resid = nbytes; //Amount of data remaining to transfer (all of it)
-	u.uio_segflg = UIO_USERSPACE;
-	u.uio_rw = UIO_WRITE; //Operation Type: write 
-	u.uio_space = curthread->t_addrspace; //Get address space from curthread (is this right?)
-	
-	//Pass this stuff to VOP_WRITE
-	result = VOP_WRITE(device, &u);
-	if(result)
-	{
-		//TODO check for nonzero error codes and return something else if needed...
-		//return proper error code
-		return EIO;
-	}
-
-
-
-	//resid amount of data remaining to transfer. nbytes the amount of data we need to write.
-	//Our write succeeded. Per the man pages, return the # of bytes written (might not be everything)
-	*retval = nbytes - u.uio_resid;
-	if(fd == STDOUT_FILENO || fd == STDERR_FILENO)
-	{
-		return 0;
-	}
-	else
-	{
-		fh->fh_offset = u.uio_offset;
-	}
-	return 0;
-	*/
 }
 
 
 int
 sys_read(int fd, const void* buf, size_t buflen, int* retval)
 {
-	/*
-	(void)fd;
-	(void)buf;
-	(void)buflen;
-	(void)retval;
-	*/
+
 	int result = check_valid_fd(fd);
 	if(result)
 	{
@@ -732,26 +609,16 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 	struct uio u;
 	struct thread *cur = curthread;
 	struct process *proc = get_process(cur->t_pid);
-	struct file_handle *fh = get_file_handle(proc->p_id, fd);
 	//Make sure fd refers to an open file (i.e. it's valid to read)
 	result = check_open_fd(fd,proc);
 	if(result)
 	{
 		return result;
 	}
-	struct file_object *fo = fh->fh_file_object;
-	//int bytes_read = 0;
 
-	//Can't read from Standard Out or Standard Error
-	//kprintf("Current fd is %d.\n",fd);
-	/*
-	if(fd == STDOUT_FILENO || STDERR_FILENO)
-	{
-		kprintf("Current fd is %d.\n",fd);
-		kprintf("Cannot read from STDOUT or STDERR.\n");
-		return EBADF;
-	}
-	*/
+	struct file_handle *fh = get_file_handle(proc->p_id, fd);
+	struct file_object *fo = fh->fh_file_object;
+
 	//First check that the specified file is open for reading.
 
 	if(!(fh->fh_flags & (O_RDWR|O_RDONLY)))
@@ -845,16 +712,12 @@ sys_close(int fd)
 int
 sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
 {
-	//(void)fd;
-	//(void)pos;
-	//(void)whence;
 	//Check if fd is valid (part one :) )
-	if(fd < 0 || fd > OPEN_MAX)
+	if(fd < 0 || fd >= FD_MAX)
 	{
 		return EBADF;
 	}
-	//kprintf("Inside lseek.\n");
-	//kprintf("fd = %d.\n", fd);
+
 	struct thread *cur = curthread;
 	struct process *proc = get_process(cur->t_pid);
 	if(proc->p_fd_table[fd] == NULL) {
@@ -863,7 +726,7 @@ sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
 	}
 	struct file_handle *fh = get_file_handle(proc->p_id, fd);
 	//fd might be positive, but it could still be bad. Check here:
-	if( fh == NULL)
+	if(fh == NULL)
 	{
 		return EBADF;
 	}
@@ -877,30 +740,21 @@ sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
 	struct stat file_stat;
 	int result;
 
-	
-
-	//kprintf("Past stat. Result %d. File size %ld.\n", result, (long int)file_stat.st_size);
-	//kprintf("Whence = %d.\n", whence);
 	switch (whence) {
 		case SEEK_SET:
-			// Beginning of file plus pos.
 			fh->fh_offset = pos;
 			result = 0;
 			break;
 		case SEEK_CUR:
-			// Current offset plus pos.
 			fh->fh_offset += pos;
 			result = 0;
 			break;
 		case SEEK_END:
-			// File size plus pos.
 			result = VOP_STAT(fo->fo_vnode, &file_stat);
 			fh->fh_offset = file_stat.st_size + pos;
-			//fh->fh_offset = pos;
 			result = 0;
 			break;
 		default:
-			//kprintf("Seek whence is not valid.\n");
 			return EINVAL;
 			break;
 	}
@@ -914,8 +768,11 @@ sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
 int
 sys_dup2(int oldfd, int newfd, int* retval)
 {
-	//(void)oldfd;
-	//(void)newfd;
+	// Dup'ing onto same fd does nothing.
+	if(oldfd == newfd) {
+		return newfd;
+	}
+	
 	int result = check_valid_fd(oldfd);
 	if(result)
 	{
@@ -927,24 +784,26 @@ sys_dup2(int oldfd, int newfd, int* retval)
 		return result;
 	}
 	struct process *proc = get_process(curthread->t_pid);
+
 	result = check_open_fd(oldfd, proc);
 	if(result)
 	{
 		return result;
 	}
-	if(proc->p_fd_table[newfd] != NULL) {
-		//Close the open file handle and descriptor.
-		// Check if fd is not a valid file descriptor.
-		// Call vfs_close().
-		vfs_close(proc->p_fd_table[newfd]->fh_file_object->fo_vnode);
+
+	struct file_handle *fh_new = proc->p_fd_table[newfd];
+	struct file_object *fo_new = fh_new->fh_file_object;
+	if(fh_new != NULL) {
+		// Close the open file handle and descriptor.
+		lock_acquire(fo_new->fo_vnode_lk);
+		vfs_close(fo_new->fo_vnode);
+		lock_release(fo_new->fo_vnode_lk);
 
 		// Decrement file handle reference count; if zero, destroy file handle.
-		proc->p_fd_table[newfd]->fh_open_count -= 1;
-		if(proc->p_fd_table[newfd]->fh_open_count == 0) {
-		fh_destroy(proc->p_fd_table[newfd]);
+		fh_new->fh_open_count -= 1;
+		if(fh_new->fh_open_count == 0) {
+			fh_destroy(fh_new);
 		}
-		// Free file descriptor; if 0, 1, or 2, reset file descriptor to STDIN, STDOUT, STDERR, respectively.
-		//release_file_descriptor(proc->p_id, fd);
 	}
 
 	proc->p_fd_table[newfd] = proc->p_fd_table[oldfd];
@@ -956,7 +815,6 @@ sys_dup2(int oldfd, int newfd, int* retval)
 int
 sys_chdir(const char* pathname, int* retval)
 {
-	//(void)pathname;
 	int result;
 	char *cd = (char*)pathname;
 
@@ -986,18 +844,21 @@ sys_chdir(const char* pathname, int* retval)
 int
 sys___getcwd(char* buf, size_t buflen, int* retval)
 {
-	//(void)buf;
-	//(void)buflen;
+	int result;
+	//Check if pathname is a valid pointer by attempting to dereference it and copy a single byte.
+	result = check_userptr( (const_userptr_t) buf);
+	if(result)
+	{
+		return result;
+	}
+	//Check if buffer is NULL:
+	if(buf == NULL)
+	{
+		return EFAULT;
+	}
 
 	struct iovec iov;
 	struct uio u;
-	int result;
-	//struct thread *cur = curthread;
-	//struct process *proc = get_process(cur->t_pid);
-	//struct file_handle *fh = get_file_handle(proc->p_id, fd);
-	//struct file_object *fo = fh->fh_file_object;
-	//int bytes_read = 0;
-
 	// Initialize iov and uio
 	iov.iov_ubase = (userptr_t) buf;		//User pointer is the buffer
 	iov.iov_len = buflen; 					//The lengeth is the number of bytes passed in
@@ -1009,6 +870,7 @@ sys___getcwd(char* buf, size_t buflen, int* retval)
 	u.uio_rw = UIO_READ; 					//Operation Type: read 
 	u.uio_space = curthread->t_addrspace;	//Get address space from curthread (is this right?)
 	
+	// Change the current working directory.
 	result = vfs_getcwd(&u);
 	if (result) {
 		return EIO;

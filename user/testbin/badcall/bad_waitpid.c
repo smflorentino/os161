@@ -36,7 +36,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <err.h>
-
+#include <stdio.h>
 #include "config.h"
 #include "test.h"
 
@@ -215,6 +215,7 @@ wait_siblings(void)
 	if (fd<0) {
 		return;
 	}
+	printf("Passed open test\n");
 
 	pids[0] = fork();
 	if (pids[0]<0) {
@@ -223,9 +224,11 @@ wait_siblings(void)
 	}
 	if (pids[0]==0) {
 		close(fd);
+		printf("Waiting 1\n");
 		wait_siblings_child();
 		_exit(0);
 	}
+	printf("Passed fork\n");
 
 	pids[1] = fork();
 	if (pids[1]<0) {
@@ -235,9 +238,11 @@ wait_siblings(void)
 	}
 	if (pids[1]==0) {
 		close(fd);
+		printf("Waiting 2\n");
 		wait_siblings_child();
 		_exit(0);
 	}
+	printf("Passed second fork\n");
 
 	rv = write(fd, pids, sizeof(pids));
 	if (rv < 0) {
@@ -250,6 +255,7 @@ wait_siblings(void)
 		/* abandon child procs :( */
 		return;
 	}
+	printf("Passed write\n");
 
 	rv = waitpid(pids[0], &x, 0);
 	if (rv<0) {
@@ -260,8 +266,13 @@ wait_siblings(void)
 		warn("UH-OH: error waiting for child 1 (pid %d)", pids[1]);
 	}
 	warnx("passed: siblings wait for each other");
+
+	printf("Passed waitpid\n");
+
 	close(fd);
+	printf("Passed close\n");
 	remove(TESTFILE);
+	printf("Passed Remove\n");
 }
 
 ////////////////////////////////////////////////////////////

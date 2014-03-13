@@ -9,13 +9,15 @@
 	#include <filesupport.h>
 	#include <vnode.h>
 
-	/*
-	*	File Object Fuctions
-	*
-	*/
-
+	
 	// Global file object list.
 	struct file_object* file_object_list[FO_MAX];
+	const char fo_list_lk_name[] = "fo_list_lock";
+	struct lock* fo_list_lock;
+
+	/*
+	*	File Object Fuctions
+	*/
 
 	/* Create a new file object. */
 	struct file_object *
@@ -29,15 +31,9 @@
 		}
 
 		strcpy(fo->fo_name, name);
-		/*kstrdup(name);
-		if(fo->fo_name == NULL) {
-			kfree(fo);
-			return NULL;
-		}*/
 
 		fo->fo_vnode = kmalloc(sizeof(struct vnode));
 		if(fo->fo_vnode == NULL) {
-			//kfree(fo->fo_name);
 			kfree(fo);
 			return NULL;
 		}
@@ -45,20 +41,20 @@
 		fo->fo_vnode_lk = lock_create(name);
 		if(fo->fo_vnode_lk == NULL) {
 			kfree(fo->fo_vnode);
-			//kfree(fo->fo_name);
 			kfree(fo);
 			return NULL;
 		}
 
 		// Add this new file object to the global file object list.
-		fo_vnode_lock_acquire();
+		lock_acquire(fo_list_lock);
 		for(int i = 0; i < FO_MAX; i++) {
+			// Find the first free index in the list; add the new fo to it.
 			if(file_object_list[i] == NULL) {
 				file_object_list[i] = fo;
 				break;
 			}
 		}
-		fo_vnode_lock_release();
+		lock_release(fo_list_lock);
 
 		return fo;
 	}
@@ -66,34 +62,21 @@
 	void
 	fo_destroy(struct file_object *fo)
 	{
-		// Method to identify particular fo to destroy.
-		//struct file_object *fo = ;
-		/*
+		// Remove the fo from the global fo list.
+		lock_acquire(fo_list_lock);
+		for(int i = 0; i < FO_MAX; i++) {
+			// Find the first free index in the list.
+			if(file_object_list[i] == fo) {
+				file_object_list[i] = NULL;
+				break;
+			}
+		}
+		lock_release(fo_list_lock);
+
+		// Remove the rest of the fo information.
 		lock_destroy(fo->fo_vnode_lk);
-		kfree(fo->fo_name);
+		kfree(fo->fo_vnode);
 		kfree(fo);
-		*/
-
-		(void) fo;
-	}
-
-	void
-	fo_vnode_lock_acquire(void)
-	{
-		(void) 1;
-	}
-
-	void
-	fo_vnode_lock_release(void)
-	{
-		(void) 1;
-	}
-
-	bool
-	fo_vnode_lock_do_i_hold(void)
-	{
-		//void) 1;
-		return 1;
 	}
 
 	// Searches the file object list array for a fo with a particular name.
@@ -101,14 +84,13 @@
 	int
 	check_file_object_list(char *filename, int *free_index)
 	{
-		//(void)filename;
 		bool found_free = false;
-		
 		struct file_object *fo;
-		fo_vnode_lock_acquire();
+
+		lock_acquire(fo_list_lock);
 		for(int i = 0; i < FO_MAX; i++) {
 			fo = file_object_list[i];
-			// Find a free index, incase we need to add a file object.
+			// Find a free index, in case we need to add a file object.
 			if((fo == NULL) && (!found_free)) {
 				found_free = true;
 				*free_index = i;
@@ -116,27 +98,35 @@
 			// See if our desired file object already exists.
 			if((fo != NULL) && (strcmp(fo->fo_name,filename) == 0)) {
 				// File object already exists, pass back its index.
-				fo_vnode_lock_release();
+				lock_release(fo_list_lock);
 				return i;
 			}
 		}
-		fo_vnode_lock_release();
+		lock_release(fo_list_lock);
 		
 		// No file object by that name exists yet.
 		return -1;
 	}
 
-	void
+	int
 	file_object_list_init(void)
 	{
+		// NULL out the file object pointer list for the first and only time
 		for(int i=0; i < FO_MAX; i++) {
 			file_object_list[i] = NULL;
 		}
+
+		// Create the list lock, since the list is global
+		fo_list_lock = lock_create(fo_list_lk_name);
+		if(fo_list_lock == NULL) {
+			return -1;
+		}
+
+		return 0;
 	}
 
 	/*
 	*	File Handle Functions
-	*
 	*/
 
 	struct file_handle *
@@ -150,7 +140,7 @@
 		}
 
 		strcpy(fh->fh_name, name);
-		// Is this correct for the fh_file_object pointer?
+
 		fh->fh_file_object = kmalloc(sizeof(struct file_object*));
 		if(fh->fh_file_object == NULL) {
 			kfree(fh);
@@ -171,8 +161,6 @@
 		// Start at the beginning of the file.
 		fh->fh_offset = 0;
 
-
-
 		return fh;
 	}
 
@@ -181,26 +169,7 @@
 	{
 		lock_destroy(fh->fh_open_lk);
 		kfree(fh->fh_file_object);
-		kfree(fh->fh_name);
 		kfree(fh);
-	}
-
-	void
-	fh_open_lock_acquire(void)
-	{
-		(void) 1;
-	}
-
-	void
-	fh_open_lock_release(void)
-	{
-		(void) 1;
-	}
-
-	bool
-	fh_open_lock_do_i_hold(void)
-	{
-		return 1;
 	}
 
 

@@ -274,7 +274,6 @@ get_free_file_descriptor(pid_t pid)
 	for(int i=3; i < FD_MAX; i++) {
 		// If the pointer is NULL, the descriptor is free for use.
 		if(proc->p_fd_table[i] == NULL) {
-			//kprintf("Grabbed fd %d.\n", i);
 			return i;
 		}			
 	}
@@ -287,7 +286,7 @@ release_file_descriptor(pid_t pid, int fd)
 {
 	struct process* proc = get_process(pid);
 	proc->p_fd_table[fd] = NULL;
-	// If fd was 0, 1, 2, reset fd to point to STDIN, STDOUT, STDERR
+	// If fd was 0, 1, 2, reset fd to point to STDIN, STDOUT, STDERR?
 }
 
 // Simply return the file handle pointer stored in the file descriptor table.
@@ -296,11 +295,12 @@ get_file_handle(pid_t pid, int fd)
 {
 	struct process* proc = get_process(pid);
 	// To do: made sure fd is valid and account for errors.
-	/*
+	
 	if(proc->p_fd_table[fd] == NULL) {
-		kprintf("File descriptor %d is not valid.\n", fd);
+		//kprintf("File descriptor %d is not valid.\n", fd);
+		return NULL;
 	}
-	*/
+	
 	return proc->p_fd_table[fd];
 }
 

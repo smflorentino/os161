@@ -224,7 +224,7 @@ kmain(char *arguments)
 	boot();
 	
 	//kprintf("scottflo cjowen\n");
-	file_object_list_init();
+	KASSERT(file_object_list_init()==0);
 	init_process_create("init");
 	console_init();
 
