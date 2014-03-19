@@ -20,7 +20,7 @@ extern struct lock* fo_list_lock;
 
 /* File Object Structure */
 struct file_object {
-	char fo_name[NAME_MAX];
+	char fo_name[PATH_MAX];
 
 	// Pointer to vnode, an abstract representation of a file.
 	struct vnode *fo_vnode;
@@ -31,7 +31,7 @@ struct file_object {
 
 
 
-struct file_object *fo_create(const char*);
+struct file_object *fo_create(char*);
 void fo_destroy(struct file_object*);
 
 void fo_vnode_lock_acquire(void);
@@ -44,7 +44,7 @@ int file_object_list_init(void);
 
 /* File Handle Structure */
 struct file_handle {
-	char fh_name[NAME_MAX];
+	char fh_name[PATH_MAX];
 
 	// Reference to file handle object.
 	struct file_object *fh_file_object;
@@ -63,7 +63,7 @@ struct file_handle {
 	struct lock *fh_open_lk;
 };
 
-struct file_handle *fh_create(const char*, int flags);
+struct file_handle *fh_create(char*, int flags);
 void fh_destroy(struct file_handle*);
 
 void fh_open_lock_acquire(void);

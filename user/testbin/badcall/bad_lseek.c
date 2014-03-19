@@ -50,6 +50,7 @@ lseek_fd_device(void)
 	int fd, rv;
 
 	fd = open("null:", O_RDONLY);
+	//fd = open("null", O_RDONLY);
 	if (fd<0) {
 		warn("UH-OH: opening null: failed");
 		return;
@@ -70,14 +71,14 @@ lseek_file_stdin(void)
 	size_t len = strlen(slogan);
 	pid_t pid;
 
-	/* fork so we don't affect our own stdin */
+	// fork so we don't affect our own stdin 
 	pid = fork();
 	if (pid<0) {
 		warn("UH-OH: fork failed");
 		return;
 	}
 	else if (pid!=0) {
-		/* parent */
+		// parent 
 		rv = waitpid(pid, &status, 0);
 		if (rv<0) {
 			warn("UH-OH: waitpid failed");
@@ -92,15 +93,15 @@ lseek_file_stdin(void)
 		}
 		return;
 	}
-	printf("Passed fork\n");
-	/* child */
+	//printf("Passed fork\n");
+	// child 
 
 	fd = open_testfile(NULL);
 	if (fd<0) {
 		_exit(0);
 	}
-	printf("Passed child\n");
-	/* 
+	//printf("Passed child\n");
+	/*
 	 * Move file to stdin.
 	 * Use stdin (rather than stdout or stderr) to maximize the
 	 * chances of detecting any special-case handling of fds 0-2.
@@ -108,7 +109,9 @@ lseek_file_stdin(void)
 	 * and it will be.)
 	 */
 	fd2 = dup2(fd, STDIN_FILENO);
-	printf("Passed dup2\n");
+	//printf("Passed dup2\n");
+	//printf("fd2 = %d\n", fd2);
+	//printf("fd = %d\n", fd);
 	if (fd2<0) {
 		warn("UH-OH: dup2 to stdin failed");
 		close(fd);
@@ -242,10 +245,13 @@ test_lseek(void)
 	test_lseek_fd();
 
 	lseek_fd_device();
-	printf("Passed fd device\n");
+	//printf("Passed fd device\n");
 	lseek_file_stdin();
-	printf("Passed stdin\n");
+	//printf("Passed stdin\n");
 	lseek_loc_negative();
+	//printf("Passed negative\n");
 	lseek_loc_pasteof();
+	//printf("Passed pasteof\n");
 	lseek_whence_inval();
+	//printf("Passed inval\n");
 }

@@ -36,6 +36,8 @@
 #include <synch.h>
 #include <vfs.h>
 #include <vnode.h>
+ #include <thread.h>
+ #include <current.h>
 
 /*
  * Initialize an abstract vnode.
@@ -130,6 +132,7 @@ vnode_incopen(struct vnode *vn)
 	KASSERT(vn != NULL);
 
 	vfs_biglock_acquire();
+	kprintf("vn op %x\n, %d", (unsigned int)vn, curthread->t_pid);
 	vn->vn_opencount++;
 	vfs_biglock_release();
 }
@@ -146,7 +149,7 @@ vnode_decopen(struct vnode *vn)
 	KASSERT(vn != NULL);
 
 	vfs_biglock_acquire();
-
+	//kprintf("vn dec %x\n", (unsigned int)vn);
 	KASSERT(vn->vn_opencount>0);
 	vn->vn_opencount--;
 

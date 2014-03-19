@@ -68,6 +68,7 @@ dup2_self(void)
 
 	/* use fd that isn't in use */
 	testfd = CLOSED_FD;
+	//printf("Closed fd: %d\n", CLOSED_FD);
 
 	rv = dup2(STDIN_FILENO, testfd);
 	if (rv == -1) {
@@ -75,7 +76,10 @@ dup2_self(void)
 		return;
 	}
 
+	//printf("Passed close test\n");
+
 	rv = dup2(testfd, testfd);
+	//printf("returned rv = %d\n", rv);
 	if (rv == testfd) {
 		warnx("passed: dup2 to same fd");
 	}
@@ -85,6 +89,7 @@ dup2_self(void)
 	else {
 		warnx("FAILURE: dup2 to same fd: returned %d instead", rv);
 	}
+	//printf("Passed self dup\n");
 
 	rv = fstat(testfd, &sb);
 	if (rv==0) {
@@ -103,7 +108,7 @@ dup2_self(void)
 			warn("FAILURE: lseek fd after dup2 to itself");
 		}
 	}
-
+	//printf("Passed sb\n");
 	close(testfd);
 }
 
@@ -118,6 +123,7 @@ test_dup2(void)
 	dup2_fd2(-5, "dup2 to -5");
 	dup2_fd2(IMPOSSIBLE_FD, "dup2 to impossible fd");
 #ifdef OPEN_MAX
+	//printf("OPEN_MAX is %d\n", OPEN_MAX);
 	dup2_fd2(OPEN_MAX, "dup2 to OPEN_MAX");
 #else
 	warnx("Warning: OPEN_MAX not defined - test skipped");

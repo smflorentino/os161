@@ -21,7 +21,7 @@
 
 	/* Create a new file object. */
 	struct file_object *
-	fo_create(const char *name)
+	fo_create(char *name)
 	{
 		struct file_object *fo;
 
@@ -46,7 +46,7 @@
 		}
 
 		// Add this new file object to the global file object list.
-		lock_acquire(fo_list_lock);
+		//lock_acquire(fo_list_lock);
 		for(int i = 0; i < FO_MAX; i++) {
 			// Find the first free index in the list; add the new fo to it.
 			if(file_object_list[i] == NULL) {
@@ -54,7 +54,7 @@
 				break;
 			}
 		}
-		lock_release(fo_list_lock);
+		//lock_release(fo_list_lock);
 
 		return fo;
 	}
@@ -75,6 +75,7 @@
 
 		// Remove the rest of the fo information.
 		lock_destroy(fo->fo_vnode_lk);
+		fo->fo_vnode = NULL;
 		kfree(fo->fo_vnode);
 		kfree(fo);
 	}
@@ -87,7 +88,7 @@
 		bool found_free = false;
 		struct file_object *fo;
 
-		lock_acquire(fo_list_lock);
+		
 		for(int i = 0; i < FO_MAX; i++) {
 			fo = file_object_list[i];
 			// Find a free index, in case we need to add a file object.
@@ -98,11 +99,11 @@
 			// See if our desired file object already exists.
 			if((fo != NULL) && (strcmp(fo->fo_name,filename) == 0)) {
 				// File object already exists, pass back its index.
-				lock_release(fo_list_lock);
+				//lock_release(fo_list_lock);
 				return i;
 			}
 		}
-		lock_release(fo_list_lock);
+		
 		
 		// No file object by that name exists yet.
 		return -1;
@@ -130,7 +131,7 @@
 	*/
 
 	struct file_handle *
-	fh_create(const char *name, int flags)
+	fh_create(char *name, int flags)
 	{
 		struct file_handle *fh;
 
@@ -155,7 +156,7 @@
 		}
 
 		// One process now has this file handle referenced.
-		fh->fh_open_count = 1;
+		fh->fh_open_count = 1; // Should be 1
 		fh->fh_flags = flags;
 
 		// Start at the beginning of the file.
@@ -167,6 +168,8 @@
 	void
 	fh_destroy(struct file_handle *fh)
 	{
+		KASSERT(fh->fh_open_count == 0);
+		fh->fh_file_object = NULL;
 		lock_destroy(fh->fh_open_lk);
 		kfree(fh->fh_file_object);
 		kfree(fh);

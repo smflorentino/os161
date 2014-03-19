@@ -82,7 +82,11 @@ process_create(const char *name, pid_t parent, struct process **ret)
 		process->p_fd_table[i] = parent_p->p_fd_table[i];
 		// Increment the file handle open count if valid.
 		if(process->p_fd_table[i] != NULL) {
-			process->p_fd_table[i]->fh_open_count++;
+			lock_acquire(process->p_fd_table[i]->fh_open_lk);
+				//kprintf("fhc was %d on %d for %d\n",process->p_fd_table[i]->fh_open_count, i, process->p_id);
+				process->p_fd_table[i]->fh_open_count = (process->p_fd_table[i]->fh_open_count) + 1;
+				//kprintf("fhc now %d on %d for %d\n",process->p_fd_table[i]->fh_open_count, i, process->p_id);
+			lock_release(process->p_fd_table[i]->fh_open_lk);
 		}
 	}
 

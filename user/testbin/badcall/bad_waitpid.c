@@ -40,6 +40,7 @@
 #include "config.h"
 #include "test.h"
 
+/*
 static
 void
 wait_badpid(int pid, const char *desc)
@@ -74,7 +75,7 @@ void
 wait_unaligned(void)
 {
 	int rv, pid, x;
-	int status[2];	/* will have integer alignment */
+	int status[2];	// will have integer alignment 
 	char *ptr;
 
 	pid = fork();
@@ -86,10 +87,10 @@ wait_unaligned(void)
 		exit(0);
 	}
 
-	/* start with proper integer alignment */
+	// start with proper integer alignment 
 	ptr = (char *)(&status[0]);
 
-	/* generate improper alignment on platforms with restrictions*/
+	// generate improper alignment on platforms with restrictions
 	ptr++;
 
 	rv = waitpid(pid, (int *)ptr, 0);
@@ -141,7 +142,7 @@ wait_parent(void)
 		return;
 	}
 	if (childpid==0) {
-		/* Child. Wait for parent. */
+		// Child. Wait for parent.
 		rv = waitpid(mypid, &x, 0);
 		report_survival(rv, errno, "wait for parent (from child)");
 		_exit(0);
@@ -149,7 +150,7 @@ wait_parent(void)
 	rv = waitpid(childpid, &x, 0);
 	report_survival(rv, errno, "wait for parent test (from parent)");
 }
-
+*/
 ////////////////////////////////////////////////////////////
 
 static
@@ -184,6 +185,10 @@ wait_siblings_child(void)
 			     mypid);
 			return;
 		}
+		/*for(int i = 0; i < 10000; i++) {
+			(void)i;
+		}
+		*/
 	} while (rv < (int)sizeof(pids));
 
 	if (mypid==pids[0]) {
@@ -197,6 +202,7 @@ wait_siblings_child(void)
 		     mypid);
 		return;
 	}
+	printf("Child %d closing fd %d\n", mypid, fd);
 	close(fd);
 
 	rv = waitpid(otherpid, &x, 0);
@@ -210,12 +216,13 @@ wait_siblings(void)
 	int pids[2], fd, rv, x;
 
 	/* Note: this may also blow up if FS synchronization is substandard */
-
+	printf("Starting Wait sib\n");
+	
 	fd = open_testfile(NULL);
 	if (fd<0) {
 		return;
 	}
-	printf("Passed open test\n");
+	//printf("Passed open test\n");
 
 	pids[0] = fork();
 	if (pids[0]<0) {
@@ -226,9 +233,10 @@ wait_siblings(void)
 		close(fd);
 		printf("Waiting 1\n");
 		wait_siblings_child();
+		printf("Returned 1\n");
 		_exit(0);
 	}
-	printf("Passed fork\n");
+	//printf("Passed fork\n");
 
 	pids[1] = fork();
 	if (pids[1]<0) {
@@ -240,9 +248,10 @@ wait_siblings(void)
 		close(fd);
 		printf("Waiting 2\n");
 		wait_siblings_child();
+		printf("Returned 2\n");
 		_exit(0);
 	}
-	printf("Passed second fork\n");
+	//printf("Passed second fork\n");
 
 	rv = write(fd, pids, sizeof(pids));
 	if (rv < 0) {
@@ -256,7 +265,7 @@ wait_siblings(void)
 		return;
 	}
 	printf("Passed write\n");
-
+	
 	rv = waitpid(pids[0], &x, 0);
 	if (rv<0) {
 		warn("UH-OH: error waiting for child 0 (pid %d)", pids[0]);
@@ -268,7 +277,7 @@ wait_siblings(void)
 	warnx("passed: siblings wait for each other");
 
 	printf("Passed waitpid\n");
-
+	
 	close(fd);
 	printf("Passed close\n");
 	remove(TESTFILE);
@@ -280,6 +289,7 @@ wait_siblings(void)
 void
 test_waitpid(void)
 {
+	/*
 	wait_badpid(-8, "wait for pid -8");
 	wait_badpid(-1, "wait for pid -1");
 	wait_badpid(0, "pid zero");
@@ -295,5 +305,6 @@ test_waitpid(void)
 
 	wait_self();
 	wait_parent();
+	*/
 	wait_siblings();
 }
