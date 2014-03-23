@@ -73,8 +73,6 @@ process_create(const char *name, pid_t parent, struct process **ret)
 	parentprocesslist[process->p_id] = parent;
 	processtable_biglock_release();
 
-	// To Do: initialize fd array to have 0 thru 2 point to stdin, stdout, stderr.
-	// All other pointers to NULL.
 	// Copy over the file descriptors
 	struct process *parent_p = get_process(parent);
 
@@ -83,9 +81,7 @@ process_create(const char *name, pid_t parent, struct process **ret)
 		// Increment the file handle open count if valid.
 		if(process->p_fd_table[i] != NULL) {
 			lock_acquire(process->p_fd_table[i]->fh_open_lk);
-				//kprintf("fhc was %d on %d for %d\n",process->p_fd_table[i]->fh_open_count, i, process->p_id);
 				process->p_fd_table[i]->fh_open_count = (process->p_fd_table[i]->fh_open_count) + 1;
-				//kprintf("fhc now %d on %d for %d\n",process->p_fd_table[i]->fh_open_count, i, process->p_id);
 			lock_release(process->p_fd_table[i]->fh_open_lk);
 		}
 	}
@@ -138,18 +134,10 @@ init_process_create(const char *name)
 
 	curthread->t_pid = process->p_id;
 
-	
-
-	// To Do: initialize fd array to have 0 thru 2 point ot stdin, stdout, stderr.
-	// All other pointers to NULL.
+	// First three fd's are set to stdin, out, err by consol_init()
 	for(int i = 0; i < FD_MAX; i++) {
 		process->p_fd_table[i] = NULL;
 	}
-
-
-
-	// Clear out the file object list for the first and only time.
-	//file_object_list_init();
 
 	return process;
 }

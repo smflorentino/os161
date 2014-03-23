@@ -111,8 +111,6 @@ syscall(struct trapframe *tf)
 
 	if(callno == SYS_lseek) {
 		// Create the 64-bit arguments, in case we need them.
-		//kprintf("arg2 = %d, arg3 = %d.\n", tf->tf_a2, tf->tf_a3);
-		//arg64_1 = ((off_t) tf->tf_a2) + ((off_t) tf->tf_a3 * 4294967296);
 		// Need to OR and shift in order, since variables are only 32-bit.
 		arg64_1 |= tf->tf_a2;
 		arg64_1 = arg64_1 << 32;
@@ -122,7 +120,6 @@ syscall(struct trapframe *tf)
 		if (err) {
 			kprintf("Bad mem point.\n");
 		}
-		//kprintf("Whence = %d., arg61_1 = %ld.\n", whence, (long int)arg64_1);
 	}
 
 	/*
@@ -325,8 +322,6 @@ enter_forked_process(void *tf, unsigned long parentpid)
 
 static struct vnode* console;
 static char conname[] = "con:";
-static struct vnode* null_dev;
-static char nulname[] = "null:";
 
 /* Initialization Functions */
 
@@ -338,40 +333,26 @@ console_init()
 
 	DEBUG(DB_WRITE,"Getting console vnode...");
 
-	// No need for a lock, since we are doing this during boot time.
 	// Create the console device.
 	result = vfs_open(conname,O_RDWR,0,&console);
 	KASSERT(console != NULL);
-	KASSERT(result == 0);
-	
-	// Create the null device.
-	result = vfs_open(nulname,O_RDONLY,0,&null_dev);
-	KASSERT(null_dev != NULL);
 	KASSERT(result == 0);
 
 	struct thread *cur = curthread;
 	struct process *proc = get_process(cur->t_pid);
 
-	// Create all the handles and the console file object.
-	struct file_object *fo_con = fo_create(conname);
-	struct file_object *fo_nul = fo_create(nulname);
+	// Create all the handles.
 	struct file_handle *fh_stdin = fh_create(conname, O_RDONLY);
 	struct file_handle *fh_stdout = fh_create(conname, O_WRONLY);
 	struct file_handle *fh_stderr = fh_create(conname, O_WRONLY);	
 
-	fo_con->fo_vnode = console;
-	fo_nul->fo_vnode = null_dev;
-
-	file_object_list[0] = fo_con;
-	file_object_list[1] = fo_nul;
-
 	// Link all the file handles to the same console file object.
-	fh_stdin->fh_file_object = fo_con;
-	fh_stdout->fh_file_object = fo_con;
-	fh_stderr->fh_file_object = fo_con;
+	fh_stdin->vnode = console;
+	fh_stdout->vnode = console;
+	fh_stderr->vnode = console;
 
-	// Link all the file handles to the appropriate file descriptor in the first process.
-	// Hope these get copied over by fork() and the like...
+	// Link all the file handles to the appropriate file descriptors in the first process.
+	// These get copied over by fork() to other processes
 	proc->p_fd_table[STDIN_FILENO] = fh_stdin;
 	proc->p_fd_table[STDOUT_FILENO] = fh_stdout;
 	proc->p_fd_table[STDERR_FILENO] = fh_stderr;
@@ -384,7 +365,7 @@ static
 int
 check_valid_fd(int fd)
 {
-	if((fd < 0) || (fd > OPEN_MAX-1))
+	if((fd < 0) || (fd >= OPEN_MAX))
 	{
 		//kprintf("Failed check fd with fd = %d.\n", fd);
 		return EBADF;
@@ -423,7 +404,6 @@ check_open_fd(int fd, struct process* proc)
  	return 0;
  }
 
-/* Passes badcall_c now*/
 int
 sys_open(char* filename, int flags, int *retval)
 {
@@ -431,42 +411,36 @@ sys_open(char* filename, int flags, int *retval)
 	struct thread *cur = curthread;
 	struct process *proc = get_process(cur->t_pid);
 	struct file_handle *fh;
-	struct file_object *fo;
 	int fd;
-	int fo_index = -1; 	// Index into file object array if it exits; -1 if no object and need to create.
-	int fo_free = -1; 	// Next free index in file object list.
 	int result = 0;
-	char path[PATH_MAX];		// Passed to vfs_open, since it maybe destroyed
+	char path[PATH_MAX];		// Passed to vfs_open, since it may be destroyed
 	
-
-
 	//If filename is null, return
 	if(filename == NULL)
 	{
 		return EFAULT;
 	}
+
 	//Check if filename is a valid pointer by attempting to dereference it and copy a single byte.
 	result = check_userptr((const_userptr_t) filename);
 	if(result)
 	{
 		return result;
 	}
+
 	//File name pointer is valid. Now, check if it's empty:
 	if(strlen(filename) == 0)
 	{
 		return EINVAL;
 	}
-	//if(filename[sizeof(filename)] == ':') {
-	//	kprintf("Writing null term to %s\n", filename);
-	//	filename[sizeof(filename)] = '\0';
-	//}
 
-	//Check for invalid flags. Crude, but it works...
+	//Check for invalid flags.
 	//Make sure we have one of O_RDONLY, O_WRONLY, O_RDWR
 	if( (O_ACCMODE & flags) > 2)
 	{
 		return EINVAL;
 	}
+
 	//Now, ensure other flags are present (and no more)
 	if( !( flags < (O_CREAT | O_EXCL | O_TRUNC | O_APPEND | O_RDONLY | O_WRONLY | O_RDWR) ))
 	{
@@ -486,60 +460,48 @@ sys_open(char* filename, int flags, int *retval)
 	// Create file handle, with flags initialized; place pointer in process fd table.
 	fh = fh_create(path, flags);
 	if(fh == NULL) {
-		//kprintf("Failed to create file handle.\n");
+		// Failed to create file handle for some reason, like a bad kmalloc
 		return EMFILE;
 	}
+
 	proc->p_fd_table[fd] = fh;
 
-	// Check if file object exists already.
-	lock_acquire(fo_list_lock);
-	fo_index = check_file_object_list(path, &fo_free);
-	if((fo_index < 0) && (O_CREAT & flags)) {
-		// If it doesnt exist, create a new file object.
-		fo = fo_create(path);
-		kprintf("created new file\n");
-		file_object_list[fo_free] = fo;
-			// Open/create vnode, which is the file. 
-		//lock_acquire(fo->fo_vnode_lk);
-		//result = vfs_open(path, flags,/* Ignore MODE*/ 0, &(fo->fo_vnode));
-		//lock_release(fo->fo_vnode_lk);
-	}
-	else if((fo_index < 0) && !(O_CREAT & flags)) {
-		// No file object and create wasnt flagged, so exit.
-		lock_release(fo_list_lock);
-		return ENOENT;
-	}
-	else if((fo_index >= 0) && ((O_CREAT|O_EXCL) & flags)) {
-		// Create and excl selected, but file exists so exit.
-		lock_release(fo_list_lock);
-		return EEXIST;
-	}
-	else {
-		// If it exits, link to it in file handle.
-		//kprintf("Linking to file %s\n", file_object_list[fo_index]->fo_name);
-		fo = file_object_list[fo_index];
-	}
-	lock_release(fo_list_lock);
+	// Need checks for create and exist
 
-	if(fo == NULL) {
-		return ENFILE;
-	}
-	fh->fh_file_object = fo;
-
-	// Open/create vnode, which is the file. 
-	lock_acquire(fo->fo_vnode_lk);
-		KASSERT(lock_do_i_hold(fo->fo_vnode_lk));
-		//for(int i = 0; i < 100000; i++) {(void)i;}
-		result = vfs_open(path, flags,/* Ignore MODE*/ 0, &(fo->fo_vnode));
-	lock_release(fo->fo_vnode_lk);
+	result = vfs_open(path, flags,/* Ignore MODE*/ 0, &(fh->vnode));
 	if(result)
 	{
 		return EIO;
 	}
-	//kprintf("vn op %x\n", (unsigned int)*fo);
 
-	*retval = fd;
+	if(fh->fh_flags & O_APPEND) {
+		// Append mode; jump to end of file.
+		// kprintf("Append mode\n");
+		struct stat file_stat;
+		result = VOP_STAT(fh->vnode, &file_stat);
+		if(result){
+			
+			return result;
+		}
+		
+		lock_acquire(fh->fh_open_lk);
+			fh->fh_offset = file_stat.st_size;
+		lock_release(fh->fh_open_lk);
+	}
+	else if(fh->fh_flags & O_TRUNC) {
+		// Truncate; offset returned to zero on each write.
+		// kprintf("Truncate mode\n");
+		lock_acquire(fh->fh_open_lk);
+			fh->fh_offset = 0;
+		lock_release(fh->fh_open_lk);
+	}
+	else {
+
+	}
+
 	// Successful sys_open, return file descriptor.
+	*retval = fd;
+
 	return 0;
 }
 
@@ -567,7 +529,7 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	{
 		return result;
 	}
-	//kprintf("Current write buff: %s", (char*)buf);
+
 	// Check if the fd has a file handle attached to it.
 	result = check_open_fd(fd,proc);
 	if(result)
@@ -576,44 +538,13 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	}
 	// fd seems legit, now start checking the file handle
 	struct file_handle *fh = get_file_handle(proc->p_id, fd);
+	
 	// Check that file flags allow for writing.
 	if((fh->fh_flags & O_ACCMODE) == 0) {
 		return EBADF;
 	}
-
-	struct file_object *fo = fh->fh_file_object;
-
-	//TODO handle when fd is an actual file...
 	
-	if(fh->fh_flags & O_APPEND) {
-		// Append mode; jump to end of file.
-		kprintf("Append mode\n");
-		struct stat file_stat;
-		lock_acquire(fo->fo_vnode_lk);
-			KASSERT(lock_do_i_hold(fo->fo_vnode_lk));
-			result = VOP_STAT(fo->fo_vnode, &file_stat);
-		lock_release(fo->fo_vnode_lk);
-		//kprintf("result: %d\n",result);
-		if(result){
-			
-			return result;
-		}
-		
-		//kprintf("Passed file stat\n");
-		lock_acquire(fh->fh_open_lk);
-		fh->fh_offset = file_stat.st_size;
-		lock_release(fh->fh_open_lk);
-	}
-	else if(fh->fh_flags & O_TRUNC) {
-		// Truncate; offset returned to zero on each write.
-		//kprintf("Truncate mode\n");
-		//fh->fh_offset = 0;
-	}
-	else {
-
-	}
-	
-	lock_acquire(fh->fh_open_lk);
+	lock_acquire(fh->fh_open_lk);		// Lock in case multiple processes see this handle
 	//Create an iovec struct.
 	iov.iov_ubase = (userptr_t) buf; 	//User pointer is the buffer
 	iov.iov_len = nbytes; 				//The lengeth is the number of bytes passed in
@@ -627,14 +558,10 @@ sys_write(int fd, const void* buf, size_t nbytes, int* retval)
 	u.uio_space = curthread->t_addrspace; //Get address space from curthread (is this right?)
 	
 	//Pass this stuff to VOP_WRITE
-	lock_acquire(fo->fo_vnode_lk);
-		KASSERT(lock_do_i_hold(fo->fo_vnode_lk));
-		result = VOP_WRITE(fo->fo_vnode, &u);
-	lock_release(fo->fo_vnode_lk);
+	result = VOP_WRITE(fh->vnode, &u);
 	if(result)
 	{
 		lock_release(fh->fh_open_lk);
-		//TODO check for nonzero error codes and return something else if needed...
 		return result;
 	}
 
@@ -668,11 +595,13 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 	{
 		return result;
 	}
+
 	//Variables and structs
 	struct iovec iov;
 	struct uio u;
 	struct thread *cur = curthread;
 	struct process *proc = get_process(cur->t_pid);
+
 	//Make sure fd refers to an open file (i.e. it's valid to read)
 	result = check_open_fd(fd,proc);
 	if(result)
@@ -681,10 +610,8 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 	}
 
 	struct file_handle *fh = get_file_handle(proc->p_id, fd);
-	struct file_object *fo = fh->fh_file_object;
 
 	//First check that the specified file is open for reading.
-
 	if(!(fh->fh_flags & (O_RDWR|O_RDONLY)))
 	{
 		if(fh->fh_flags != O_RDONLY)
@@ -701,39 +628,34 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 	}
 
 	
+	
 	// Initialize iov and uio
+	lock_acquire(fh->fh_open_lk);			// Lock it in case another process has access to this handle
 	iov.iov_ubase = (userptr_t) buf;		//User Data(copied into kernel) pointer is the buffer
 	iov.iov_len = buflen; 					//The lengeth is the number of bytes passed in
 	u.uio_iov = &iov; 
 	u.uio_iovcnt = 1; 						//Only 1 iovec
-	lock_acquire(fh->fh_open_lk);
 	u.uio_offset = fh->fh_offset; 			//Start at the file handle offset
-	lock_release(fh->fh_open_lk);
 	u.uio_resid = buflen;					//Amount of data remaining to transfer
 	u.uio_segflg = UIO_USERSPACE;			//
 	u.uio_rw = UIO_READ; 					//Operation Type: read 
 	u.uio_space = curthread->t_addrspace;	//Get address space from curthread (is this right?)
-	//kprintf("About to read %x before lk\n", (unsigned int)fo->fo_vnode);
-	lock_acquire(fo->fo_vnode_lk);
-		//kprintf("About to read %x after lk\n", (unsigned int)fo->fo_vnode);
-		KASSERT(lock_do_i_hold(fo->fo_vnode_lk));
-		result = VOP_READ(fo->fo_vnode, &u);
-	lock_release(fo->fo_vnode_lk);
+
+	result = VOP_READ(fh->vnode, &u);
 	if (result) {
-		//kprintf("\nRead opreation failed.\n");
 		lock_release(fh->fh_open_lk);
 		return result;
-		// return EIO;1
 	}
 	
-	// Determine bytes read.
-	//bytes_read = u.uio_offset - fh->fh_offset;
 	// Update file offset in file handle.
-	lock_acquire(fh->fh_open_lk);
 	fh->fh_offset = u.uio_offset;
 	lock_release(fh->fh_open_lk);
 
+	// Return bytes read
 	*retval = buflen - u.uio_resid;
+	if(u.uio_resid != 0) {
+		kprintf("Haven't finished reading\n");
+	}
 
 	return 0;
 }
@@ -752,20 +674,18 @@ sys_close(int fd)
 	struct thread *cur = curthread;
 	struct process *proc = get_process(cur->t_pid);
 	struct file_handle *fh = get_file_handle(proc->p_id, fd);
+
 	// Make sure fd refers to an open file (i.e. it's valid to close)
 	result = check_open_fd(fd,proc);
 	if(result)
 	{
 		return result;
 	}
-	struct file_object *fo = fh->fh_file_object;
 
 	// Decrement file handle reference count; if zero, destroy file handle.
 	lock_acquire(fh->fh_open_lk);
-		//kprintf("fhc was %d\n",fh->fh_open_count);
 		fh->fh_open_count = (fh->fh_open_count) - 1;
-		//kprintf("fhc now %d\n",fh->fh_open_count);
-	lock_release(fh->fh_open_lk);
+
 
 	// Only call vfs_close if the file handle count is zero. This is because vfs_open
 	// creates a unique fh on each open() call. Only on a fh destroy do we call vfs_close.
@@ -773,14 +693,15 @@ sys_close(int fd)
 	// called shortly after dup2(), but the original fh remains for the newfd, and vfs_close()
 	// would cause an additional close without a matching open.
 	if(fh->fh_open_count == 0) {
-		lock_acquire(fo->fo_vnode_lk);
-			KASSERT(lock_do_i_hold(fo->fo_vnode_lk));
-			vfs_close(fo->fo_vnode);
-		lock_release(fo->fo_vnode_lk);
+		vfs_close(fh->vnode);			// Does not return error, so nothing to check.
+		lock_release(fh->fh_open_lk);
 		fh_destroy(fh);
 	}
+	else {
+		lock_release(fh->fh_open_lk);
+	}
 
-	release_file_descriptor(proc->p_id, fd);
+	release_file_descriptor(proc->p_id, fd);	// Free the fd for use by teh process
 
 	return 0;
 }
@@ -803,17 +724,19 @@ sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
 		return EBADF;
 	}
 	struct file_handle *fh = get_file_handle(proc->p_id, fd);
+	
 	//fd might be positive, but it could still be bad. Check here:
 	if(fh == NULL)
 	{
 		return EBADF;
 	}
-	struct file_object *fo = fh->fh_file_object;
+
 	/* If vnode fs is null, most likely vnode refers to device*, per vnode.h*/
-	if(fo->fo_vnode->vn_fs == NULL)
+	if(fh->vnode->vn_fs == NULL)
 	{
 		return ESPIPE;
 	}
+
 	// Get the file stats so we can determine file size if needed.
 	struct stat file_stat;
 	int result;
@@ -829,10 +752,7 @@ sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
 			result = 0;
 			break;
 		case SEEK_END:
-			lock_acquire(fo->fo_vnode_lk);
-				KASSERT(lock_do_i_hold(fo->fo_vnode_lk));
-				result = VOP_STAT(fo->fo_vnode, &file_stat);
-			lock_release(fo->fo_vnode_lk);
+			result = VOP_STAT(fh->vnode, &file_stat);
 			newpos = file_stat.st_size + pos;
 			result = 0;
 			break;
@@ -849,9 +769,9 @@ sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
 	}
 	else {
 		fh->fh_offset = newpos;
+		lock_release(fh->fh_open_lk);
 	}
-	lock_release(fh->fh_open_lk);
-
+	
 	*retval64 = (int)fh->fh_offset;
 
 	return 0;
@@ -889,27 +809,22 @@ sys_dup2(int oldfd, int newfd, int* retval)
 		return result;
 	}
 
-	struct file_handle *fh_new = proc->p_fd_table[newfd];
-	
-	
-	if(fh_new != NULL) {
-		struct file_object *fo_new = fh_new->fh_file_object;
-		// Close the open file handle and descriptor.
-		lock_acquire(fo_new->fo_vnode_lk);
-			KASSERT(lock_do_i_hold(fo_new->fo_vnode_lk));
-			vfs_close(fo_new->fo_vnode);
-		lock_release(fo_new->fo_vnode_lk);
-
-		// Decrement file handle reference count; if zero, destroy file handle.
+	// Check if the new fd is already in use
+	if(proc->p_fd_table[newfd] != NULL) {
+		struct file_handle *fh_new = proc->p_fd_table[newfd];
 		lock_acquire(fh_new->fh_open_lk);
-			fh_new->fh_open_count = (fh_new->fh_open_count) + 1;
-		lock_release(fh_new->fh_open_lk);
-		// Destroy the fh if no one has it open anymore.
+			fh_new->fh_open_count = fh_new->fh_open_count - 1;
+
 		if(fh_new->fh_open_count == 0) {
+			vfs_close(fh_new->vnode);			// Does not return error, so nothing to check.
+			lock_release(fh_new->fh_open_lk);
 			fh_destroy(fh_new);
 		}
+		else {
+			lock_release(fh_new->fh_open_lk);
+		}
 
-		proc->p_fd_table[newfd] = NULL;
+		release_file_descriptor(proc->p_id, newfd);	// Free the fd for use by teh process
 	}
 	
 	// Do the dupping!
@@ -928,7 +843,7 @@ int
 sys_chdir(const char* pathname, int* retval)
 {
 	int result;
-	char *cd = (char*)pathname;
+	char cd[PATH_MAX];
 
 	//Check if pathname is a valid pointer by attempting to dereference it and copy a single byte.
 	result = check_userptr( (const_userptr_t) pathname);
@@ -942,10 +857,12 @@ sys_chdir(const char* pathname, int* retval)
 		kprintf("EFAULT in chdir");
 		return EFAULT;
 	}
+
+	strcpy(cd,pathname);
+
 	result = vfs_chdir(cd);
 	if(result) {
-		// Hard I/O error.
-		return EIO;
+		return result;
 	}
 
 	*retval = 0;
@@ -985,7 +902,7 @@ sys___getcwd(char* buf, size_t buflen, int* retval)
 	// Change the current working directory.
 	result = vfs_getcwd(&u);
 	if (result) {
-		return EIO;
+		return result;
 	}
 
 	*retval = buflen - u.uio_resid;
@@ -995,21 +912,16 @@ sys___getcwd(char* buf, size_t buflen, int* retval)
 int
 sys_remove(const char* filename, int* retval)
 {
+	int result;
 	// Simple remove syscall, not fully debugged.
 
-	int fo_free;	// Unused index refenece.
-	int fo_index;	// Refence to fo in fo_list.
-	char* file = (char*)filename;
+	char file[PATH_MAX];
+	strcpy(file,filename);
 
-	// Check if file object exists already.
-	lock_acquire(fo_list_lock);
-		fo_index = check_file_object_list(file, &fo_free);
-	
-	// Remove file from list, but vnode not deleted until list fh reference is closed.
-		if(fo_index >= 0) {
-				file_object_list[fo_index] = NULL;
-		}
-	lock_release(fo_list_lock);
+	result = vfs_remove(file);
+	if(result) {
+		return result;
+	}
 
 	*retval = 0;
 

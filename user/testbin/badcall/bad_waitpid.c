@@ -40,7 +40,7 @@
 #include "config.h"
 #include "test.h"
 
-/*
+
 static
 void
 wait_badpid(int pid, const char *desc)
@@ -150,7 +150,7 @@ wait_parent(void)
 	rv = waitpid(childpid, &x, 0);
 	report_survival(rv, errno, "wait for parent test (from parent)");
 }
-*/
+
 ////////////////////////////////////////////////////////////
 
 static
@@ -202,7 +202,7 @@ wait_siblings_child(void)
 		     mypid);
 		return;
 	}
-	printf("Child %d closing fd %d\n", mypid, fd);
+	//printf("Child %d closing fd %d\n", mypid, fd);
 	close(fd);
 
 	rv = waitpid(otherpid, &x, 0);
@@ -216,7 +216,7 @@ wait_siblings(void)
 	int pids[2], fd, rv, x;
 
 	/* Note: this may also blow up if FS synchronization is substandard */
-	printf("Starting Wait sib\n");
+	//printf("Starting Wait sib\n");
 	
 	fd = open_testfile(NULL);
 	if (fd<0) {
@@ -231,9 +231,9 @@ wait_siblings(void)
 	}
 	if (pids[0]==0) {
 		close(fd);
-		printf("Waiting 1\n");
+		//printf("Waiting 1\n");
 		wait_siblings_child();
-		printf("Returned 1\n");
+		//printf("Returned 1\n");
 		_exit(0);
 	}
 	//printf("Passed fork\n");
@@ -246,9 +246,9 @@ wait_siblings(void)
 	}
 	if (pids[1]==0) {
 		close(fd);
-		printf("Waiting 2\n");
+		//printf("Waiting 2\n");
 		wait_siblings_child();
-		printf("Returned 2\n");
+		//printf("Returned 2\n");
 		_exit(0);
 	}
 	//printf("Passed second fork\n");
@@ -264,7 +264,7 @@ wait_siblings(void)
 		/* abandon child procs :( */
 		return;
 	}
-	printf("Passed write\n");
+//	printf("Passed write\n");
 	
 	rv = waitpid(pids[0], &x, 0);
 	if (rv<0) {
@@ -276,12 +276,12 @@ wait_siblings(void)
 	}
 	warnx("passed: siblings wait for each other");
 
-	printf("Passed waitpid\n");
+	//printf("Passed waitpid\n");
 	
 	close(fd);
-	printf("Passed close\n");
+	//printf("Passed close\n");
 	remove(TESTFILE);
-	printf("Passed Remove\n");
+	//printf("Passed Remove\n");
 }
 
 ////////////////////////////////////////////////////////////
@@ -289,7 +289,7 @@ wait_siblings(void)
 void
 test_waitpid(void)
 {
-	/*
+	
 	wait_badpid(-8, "wait for pid -8");
 	wait_badpid(-1, "wait for pid -1");
 	wait_badpid(0, "pid zero");
@@ -305,6 +305,6 @@ test_waitpid(void)
 
 	wait_self();
 	wait_parent();
-	*/
+	
 	wait_siblings();
 }

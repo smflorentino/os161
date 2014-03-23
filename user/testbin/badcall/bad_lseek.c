@@ -132,7 +132,7 @@ lseek_file_stdin(void)
 		remove(TESTFILE);
 		_exit(0);
 	}
-	printf("Passed write\n");
+//	printf("Passed write\n");
 	if ((unsigned)rv != len) {
 		warnx("UH-OH: write to %s (via stdin) got short count",
 		      TESTFILE);

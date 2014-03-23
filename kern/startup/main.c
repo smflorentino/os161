@@ -222,11 +222,9 @@ void
 kmain(char *arguments)
 {
 	boot();
-	
-	//kprintf("scottflo cjowen\n");
-	KASSERT(file_object_list_init()==0);
-	init_process_create("init");
-	console_init();
+
+	init_process_create("init");	// Create first process
+	console_init();					// Open console and attach to first process
 
 	DEBUG(DB_EXEC, "Finished boot()");
 

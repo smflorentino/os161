@@ -132,7 +132,7 @@ vnode_incopen(struct vnode *vn)
 	KASSERT(vn != NULL);
 
 	vfs_biglock_acquire();
-	kprintf("vn op %x\n, %d", (unsigned int)vn, curthread->t_pid);
+	//kprintf("vn op %x\n, %d", (unsigned int)vn, curthread->t_pid);
 	vn->vn_opencount++;
 	vfs_biglock_release();
 }
