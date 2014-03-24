@@ -671,21 +671,6 @@ thread_forkf(const char *name,
 	/* Thread subsystem fields */
 	newthread->t_cpu = curthread->t_cpu;
 
-	/* VM fields */
-	int result = as_copy(curthread->t_addrspace, &(newthread->t_addrspace));
-	// as_activate(newthread->t_addrspace);
-	if(result)
-	{
-		// kprintf("Address Space Copy Failed!\n");
-		return ENOMEM;
-	}
-
-	/* VFS fields */
-	if (curthread->t_cwd != NULL) {
-		VOP_INCREF(curthread->t_cwd);
-		newthread->t_cwd = curthread->t_cwd;
-	}
-
 	/*
 	 * Because new threads come out holding the cpu runqueue lock
 	 * (see notes at bottom of thread_switch), we need to account
@@ -704,6 +689,22 @@ thread_forkf(const char *name,
 		thread_destroy(newthread);
 		return err;
 	}
+
+	/* VM fields */
+	int result = as_copy(curthread->t_addrspace, &(newthread->t_addrspace));
+	// as_activate(newthread->t_addrspace);
+	if(result)
+	{
+		// kprintf("Address Space Copy Failed!\n");
+		return ENOMEM;
+	}
+
+	/* VFS fields */
+	if (curthread->t_cwd != NULL) {
+		VOP_INCREF(curthread->t_cwd);
+		newthread->t_cwd = curthread->t_cwd;
+	}
+
 	//Set pid of the curthread to the process's PID.
 	newthread->t_pid = (*(*process)).p_id;
 

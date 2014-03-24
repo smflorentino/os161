@@ -22,17 +22,19 @@
 		if(fh == NULL) {
 			return NULL;
 		}
-
+		// fh->fh_name = kstrdup(name);
 		strcpy(fh->fh_name, name);
 
 		fh->vnode = kmalloc(sizeof(struct vnode*));
 		if(fh->vnode == NULL) {
+			kfree(fh->fh_name);
 			kfree(fh);
 			return NULL;
 		}
 
 		fh->fh_open_lk = lock_create(name);
 		if(fh->fh_open_lk == NULL) {
+			kfree(fh->fh_name);
 			kfree(fh->vnode);
 			kfree(fh);
 			return NULL;
@@ -53,7 +55,8 @@
 	{
 		KASSERT(fh->fh_open_count == 0);
 		lock_destroy(fh->fh_open_lk);
-		kfree(fh->vnode);
+		// kfree(fh->fh_name);
+		// kfree(fh->vnode);
 		kfree(fh);
 	}
 

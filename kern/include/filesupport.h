@@ -10,7 +10,7 @@
 /* File Handle Structure */
 struct file_handle {
 	char fh_name[PATH_MAX];
-
+	// char *fh_name;
 	// Pointer to our file object
 	struct vnode *vnode;
 
