@@ -146,6 +146,11 @@ syscall(struct trapframe *tf)
 				 (userptr_t)tf->tf_a1);
 		break;
 
+		/*S Brake*/
+		case SYS_sbrk:
+			err = sys_sbrk((intptr_t) tf->tf_a0, &retval);
+		break;
+
 		/*Open*/
 		case SYS_open:
 			err = sys_open((char*) tf->tf_a0, (int) tf->tf_a1, &retval);
@@ -405,6 +410,46 @@ check_open_fd(int fd, struct process* proc)
  }
 
 int
+sys_sbrk(intptr_t amount, int *retval)
+{
+	
+	amount++;
+	retval = NULL;
+	
+	/*
+	// Check that amount it page-aligned.
+	if(amount%4) {
+		// Round up to increments of 4 bytes.
+		amount += 4 - (amount%4);
+	}
+
+	// Get the current location of the heap.
+	void* current_heap = curthread->t_addrspace->as_heap_end;
+
+	// Combine heap location with amount.
+	void* new_heap = current_heap + amount;
+
+	// Check that new heap value does not go less than heap start.
+	if((int)new_heap < curthread->t_addrspace->as_heap_start) {
+		return EINVAL;
+	}
+
+	// Check that new heap value does not go past heap max.
+	if((int)new_heap > HEAP_MAX) {
+		return ENOMEM;
+	}
+
+	// Set new heap value.
+	curthread->t_addrspace->as_heap_end = new_heap;
+
+	// Return pointer to new address location
+	retval = (int*)curthread->t_addrspace;
+	*/
+
+	return 0;
+}
+
+int
 sys_open(char* filename, int flags, int *retval)
 {
 
@@ -654,7 +699,7 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 	// Return bytes read
 	*retval = buflen - u.uio_resid;
 	if(u.uio_resid != 0) {
-		kprintf("Haven't finished reading\n");
+		//kprintf("Haven't finished reading\n");
 	}
 
 	return 0;
@@ -741,7 +786,6 @@ sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
 
 	// Get the file stats so we can determine file size if needed.
 	struct stat file_stat;
-	int result;
 
 	lock_acquire(fh->fh_open_lk);
 	switch (whence) {
@@ -856,7 +900,7 @@ sys_chdir(const char* pathname, int* retval)
 
 	if(pathname == NULL) {
 		// Pathname is an invalid pointer.
-		kprintf("EFAULT in chdir");
+		//kprintf("EFAULT in chdir");
 		return EFAULT;
 	}
 
@@ -915,7 +959,17 @@ int
 sys_remove(const char* filename, int* retval)
 {
 	int result;
-	// Simple remove syscall, not fully debugged.
+	//Check if pathname is a valid pointer by attempting to dereference it and copy a single byte.
+	result = check_userptr( (const_userptr_t) filename);
+	if(result)
+	{
+		return result;
+	}
+	//Check if buffer is NULL:
+	if(filename == NULL)
+	{
+		return EFAULT;
+	}
 
 	char file[PATH_MAX];
 	strcpy(file,filename);
