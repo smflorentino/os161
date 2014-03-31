@@ -712,9 +712,10 @@ sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
 	int64_t newpos;
 
 	//Check if fd is valid (part one :) )
-	if(fd < 0 || fd >= FD_MAX)
+	int result = check_valid_fd(fd);
+	if(result)
 	{
-		return EBADF;
+		return result;
 	}
 
 	struct thread *cur = curthread;
@@ -723,6 +724,7 @@ sys_lseek(int fd, off_t pos, int whence, int64_t* retval64)
 		//kprintf("File descriptor is not valid for seeking.\n");
 		return EBADF;
 	}
+	
 	struct file_handle *fh = get_file_handle(proc->p_id, fd);
 	
 	//fd might be positive, but it could still be bad. Check here:
