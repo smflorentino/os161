@@ -684,7 +684,7 @@ sys_close(int fd)
 
 	// Decrement file handle reference count; if zero, destroy file handle.
 	lock_acquire(fh->fh_open_lk);
-		fh->fh_open_count = (fh->fh_open_count) - 1;
+	fh->fh_open_count = (fh->fh_open_count) - 1;
 
 
 	// Only call vfs_close if the file handle count is zero. This is because vfs_open
