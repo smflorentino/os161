@@ -16,12 +16,15 @@ static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
 static bool vm_initialized = false;
 
+static struct page **core_map;
 /* Initialization function */
 void vm_bootstrap() 
 {
 	paddr_t firstaddr, lastaddr;
 	ram_getsize(&firstaddr,&lastaddr);
-	// int page_count = ROUNDDOWN(lastaddr, PAGE_SIZE) / PAGE_SIZE;
+	int page_count = lastaddr / PAGE_SIZE;
+	core_map = (struct page**)PADDR_TO_KVADDR(firstaddr);
+	paddr_t freeaddr = firstaddr + page_count * sizeof(struct page);
 	vm_initialized = true;
 }
 
