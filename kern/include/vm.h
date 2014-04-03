@@ -45,7 +45,10 @@
 
  typedef enum {
  	FREE,
- 	USED
+ 	USED,
+ 	CLEAN,
+ 	DIRTY,
+ 	FIXED
  } page_state_t;
 
  struct page {
@@ -54,7 +57,7 @@
  	vaddr_t va;
 
  	/* Page state */
- 	int state;
+ 	page_state_t state;
  };
 
 
