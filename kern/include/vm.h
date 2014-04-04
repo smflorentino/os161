@@ -37,6 +37,7 @@
  */
 
 #include <machine/vm.h>
+#include <addrspace.h>
 
 /* Fault-type arguments to vm_fault() */
 #define VM_FAULT_READ        0    /* A read was attempted */
@@ -45,7 +46,6 @@
 
  typedef enum {
  	FREE,
- 	USED,
  	CLEAN,
  	DIRTY,
  	FIXED
