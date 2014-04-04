@@ -26,6 +26,7 @@ void vm_bootstrap()
 	core_map = (struct page**)PADDR_TO_KVADDR(firstaddr);
 	paddr_t freeaddr = firstaddr + page_count * sizeof(struct page);
 	vm_initialized = true;
+	(void)freeaddr;
 }
 
 /* Fault handling function called by trap code */
