@@ -11,6 +11,7 @@
 #include <spinlock.h>
 #include <uio.h>
 #include <kern/iovec.h>
+#include <synch.h>
 /*
  * Wrap rma_stealmem in a spinlock.
  */
@@ -22,7 +23,7 @@ static struct page *core_map;
 static size_t page_count;
 /* TODO figure out how to do this. I'll probably kmalloc it in
 vm_bootstrap after we set the correct flag.*/ 
-// static struct lock *core_map_lock = NULL;
+static struct lock *core_map_lock = NULL;
 
 /* Initialization function */
 void vm_bootstrap() 
@@ -85,6 +86,8 @@ void vm_bootstrap()
 	/* Set VM initialization flag. alloc_kpages and free_kpages
 	should behave accordingly now*/
 	vm_initialized = true;
+	/* Now that the VM is initialized, create a lock */
+	core_map_lock = lock_create("coremap lock");
 }
 
 /* Fault handling function called by trap code */
@@ -139,10 +142,9 @@ static
 vaddr_t
 kpage_alloc()
 {
-	spinlock_acquire(&stealmem_lock);
+	lock_acquire(core_map_lock);
 	for(size_t i = 0;i<page_count;i++)
 	{
-		//TODO use a lock
 		if(core_map[i].state == FREE)
 		{
 			core_map[i].state = DIRTY;
@@ -151,11 +153,11 @@ kpage_alloc()
 			core_map[i].as = NULL;
 			zero_page(i);
 			KASSERT(core_map[i].va != 0);
-			spinlock_release(&stealmem_lock);
+			lock_release(core_map_lock);
 			return core_map[i].va;
 		}
 	}
-	spinlock_release(&stealmem_lock);
+	lock_release(core_map_lock);
 	panic("No available pages for single page alloc!");
 	return 0x0;
 }
