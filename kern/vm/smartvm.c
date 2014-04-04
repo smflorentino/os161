@@ -175,6 +175,10 @@ vaddr_t alloc_kpages(int npages)
 	if(npages == 1) {
 		return kpage_alloc();
 	}
+	else
+	{
+		panic("Can't kmalloc multiple pages (yet)");
+	}
 	vaddr_t t;
 	return t;
 }
