@@ -66,7 +66,7 @@
 #define __PID_MIN       2
 
 /* Max value for a process ID */
-#define __PID_MAX       128//32767
+#define __PID_MAX       32//32767
 
 /* Max bytes for atomic pipe I/O -- see description in the pipe() man page */
 #define __PIPE_BUF      512
@@ -91,7 +91,7 @@
  */
 
 /* Max open files per process */
-#define __OPEN_MAX      32//128
+#define __OPEN_MAX      16//128
 
 /* Max number of iovec structures at once for readv/writev/preadv/pwritev */
 #define __IOV_MAX       1024

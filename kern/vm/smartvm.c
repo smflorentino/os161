@@ -138,31 +138,98 @@ zero_page(size_t page_num)
 	memset((void*) ptr,'\0',PAGE_SIZE);
 }
 
+/* Called by kpage_alloc and kpage_nalloc */
+static
+void 
+allocate_fixed_page(size_t page_num)
+{
+	// KASSERT(lock_do_i_hold(core_map_lock));
+	core_map[page_num].state = FIXED;
+	paddr_t pa = page_num * PAGE_SIZE;
+	core_map[page_num].va = PADDR_TO_KVADDR(pa);
+	core_map[page_num].as = NULL;
+	zero_page(page_num);
+	KASSERT(core_map[page_num].va != 0);
+}
+
+/* Called by free_kpages */
+static
+void 
+free_fixed_page(size_t page_num)
+{
+	// KASSERT(lock_do_i_hold(core_map_lock));
+	core_map[page_num].state = FREE;
+	core_map[page_num].va = 0x0;
+	if(core_map[page_num].as != NULL)
+	{
+		panic("I don't know how to free page with an address space");
+	}
+}
+
 static
 vaddr_t
 kpage_alloc()
 {
-	lock_acquire(core_map_lock);
+	spinlock_acquire(&stealmem_lock);
 	for(size_t i = 0;i<page_count;i++)
 	{
 		if(core_map[i].state == FREE)
 		{
-			core_map[i].state = DIRTY;
-			paddr_t pa = i * PAGE_SIZE;
-			core_map[i].va = PADDR_TO_KVADDR(pa);
-			core_map[i].as = NULL;
-			zero_page(i);
-			KASSERT(core_map[i].va != 0);
-			lock_release(core_map_lock);
+			allocate_fixed_page(i);
+			core_map[i].npages = 1;
+			spinlock_release(&stealmem_lock);
 			return core_map[i].va;
 		}
 	}
-	lock_release(core_map_lock);
+	spinlock_release(&stealmem_lock);
 	panic("No available pages for single page alloc!");
 	return 0x0;
 }
 
-/* Allocate/free kernel heap pages (called by kmalloc/kfree) */
+static
+vaddr_t
+kpage_nalloc(int npages)
+{
+	spinlock_acquire(&stealmem_lock);
+	bool blockStarted = false;
+	int pagesFound = 0;
+	int startingPage = 0;
+	for(size_t i = 0;i<page_count;i++)
+	{
+		if(!blockStarted && core_map[i].state == FREE)
+		{
+			blockStarted = true;
+			pagesFound = 1;
+			startingPage = i;
+		}
+		else if(blockStarted && core_map[i].state != FREE)
+		{
+			blockStarted = false;
+			pagesFound = 0;
+		}
+		else if(blockStarted && core_map[i].state == FREE)
+		{
+			pagesFound++;
+		}
+		if(pagesFound == npages)
+		{
+			//Allocate the block of pages, now.
+			for(int j = startingPage; j<startingPage + npages; j++)
+			{
+				allocate_fixed_page(j);
+			}
+			core_map[startingPage].npages = npages;
+			return core_map[startingPage].va;
+			spinlock_release(&stealmem_lock);
+		}
+	}
+	spinlock_release(&stealmem_lock);
+	//TODO swap
+	panic("Couldn't find a big enough chunk for npages!");
+	return 0x0;	
+}
+
+/* Allocate kernel heap pages (called by kmalloc) */
 vaddr_t alloc_kpages(int npages)
 {
 	if(!vm_initialized) {
@@ -177,18 +244,42 @@ vaddr_t alloc_kpages(int npages)
 	if(npages == 1) {
 		return kpage_alloc();
 	}
-	else
-	{
-		panic("Can't kmalloc multiple pages (yet)");
+	else if(npages > 1) {
+		return kpage_nalloc(npages);
+	}
+	else {
+		panic("alloc_kpages called with negiatve page count!");
 	}
 	vaddr_t t;
 	return t;
 }
 
+/* Free kernel heap pages (called by kfree) */
+/* Only works for pages that are in a block */
 void free_kpages(vaddr_t addr)
 {
-	(void)addr;
-	return;
+	if(addr < 0x80000000)
+	{
+		panic("I only support KVAs right now");	
+	}
+	spinlock_acquire(&stealmem_lock);
+	kprintf("Freeing VA:%p\n", (void*) addr);
+	for(size_t i = 0;i<page_count;i++)
+	{
+		kprintf("Page %d VA: %p\n",i,(void*)core_map[i].va);
+		if(core_map[i].va == addr)
+		{
+			// size_t target = i + core_map[i].npages;
+			for(size_t j = i; j<i+core_map[i].npages;j++)
+			{
+				free_fixed_page(j);
+			}
+			kprintf("memory freed\n");
+			spinlock_release(&stealmem_lock);
+			return;
+		}
+	}
+	panic("shouldnt get here");
 }
 
 /* TLB shootdown handling called from interprocessor_interrupt */

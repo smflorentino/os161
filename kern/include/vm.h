@@ -56,6 +56,8 @@
  	struct addrspace* as;
  	vaddr_t va;
 
+ 	/* Number of pages allocated (currently used by  kpage_nalloc) */
+ 	size_t npages;
  	/* Page state */
  	page_state_t state;
  };

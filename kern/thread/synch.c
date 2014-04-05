@@ -234,6 +234,7 @@ lock_acquire(struct lock *lock)
             lock->lk_owner = curthread;
             //Now, release the spinlock.
             spinlock_release(&lock->lk_spinlock);
+        // kprintf("got lock\n");
 }
 
 //ATOMIC
@@ -258,6 +259,7 @@ lock_release(struct lock *lock)
         wchan_wakeone(lock->lk_wchan);
         //End of Atomic Operation.
         spinlock_release(&lock->lk_spinlock);
+        // kprintf("release lock\n");
 }
 
 //ATOMIC
