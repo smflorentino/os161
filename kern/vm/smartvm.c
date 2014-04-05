@@ -70,7 +70,9 @@ void vm_bootstrap()
 	{
 		// kprintf("Address of Core Map %d: %p ",i,&core_map[i]);
 		// kprintf("PA of Core Map %d:%p\n", i, (void*) (PAGE_SIZE * i));
+		core_map[i].va = PADDR_TO_KVADDR(i * PAGE_SIZE);
 		core_map[i].state = FIXED;
+		core_map[i].as = 0x0;
 	}
 	/* Mark every available page (from freeaddr + offset into next page,
 	if applicable) to lastaddr as FREE*/
@@ -263,10 +265,13 @@ void free_kpages(vaddr_t addr)
 		panic("I only support KVAs right now");	
 	}
 	spinlock_acquire(&stealmem_lock);
-	kprintf("Freeing VA:%p\n", (void*) addr);
+	// kprintf("Freeing VA:%p\n", (void*) addr);
 	for(size_t i = 0;i<page_count;i++)
 	{
-		kprintf("Page %d VA: %p\n",i,(void*)core_map[i].va);
+		if(core_map[i].va != 0x0)
+		{
+			// kprintf("Page %d VA: %p\n",i,(void*)core_map[i].va);
+		}
 		if(core_map[i].va == addr)
 		{
 			// size_t target = i + core_map[i].npages;
@@ -274,7 +279,7 @@ void free_kpages(vaddr_t addr)
 			{
 				free_fixed_page(j);
 			}
-			kprintf("memory freed\n");
+			// kprintf("memory freed\n");
 			spinlock_release(&stealmem_lock);
 			return;
 		}
