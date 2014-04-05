@@ -257,7 +257,7 @@ vaddr_t alloc_kpages(int npages)
 }
 
 /* Free kernel heap pages (called by kfree) */
-/* Only works for pages that are in a block */
+/* Only works for pages that are in a  contiguous block */
 void free_kpages(vaddr_t addr)
 {
 	if(addr < 0x80000000)
@@ -268,10 +268,6 @@ void free_kpages(vaddr_t addr)
 	// kprintf("Freeing VA:%p\n", (void*) addr);
 	for(size_t i = 0;i<page_count;i++)
 	{
-		if(core_map[i].va != 0x0)
-		{
-			// kprintf("Page %d VA: %p\n",i,(void*)core_map[i].va);
-		}
 		if(core_map[i].va == addr)
 		{
 			// size_t target = i + core_map[i].npages;
