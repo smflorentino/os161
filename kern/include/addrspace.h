@@ -90,8 +90,9 @@ struct addrspace {
         /* Heap Start & End */
         vaddr_t heap_start;
         vaddr_t heap_end;
+        
         /* User Stack */
-        vaddr_t stack;ß
+        vaddr_t stack;
 #endif
 };
 
