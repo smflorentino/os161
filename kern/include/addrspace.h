@@ -62,6 +62,19 @@ struct addrspace {
         paddr_t as_stackpbase;
 #else
         /* Put stuff here for your VM system */
+
+        /* Page Directory */
+        int page_dir[1024];
+        /* Page Table */
+        int page_table[1024]; 
+
+        /* TODO */
+        /*
+        Stuff to ADD:
+        User code or date segment
+        User heap, between heap_start and heap_end
+        User stack
+        */
 #endif
 };
 
