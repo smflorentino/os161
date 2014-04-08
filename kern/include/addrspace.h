@@ -40,6 +40,10 @@
 
 // CJO: arbitrarily defined, to be changed when we layout our address space
 #define   HEAP_MAX    0x10000000
+/* Essentially we could do...
+int *page_dir[1024]
+each of which ^ would point to a 1024-element int array.
+We use the struct for clarity. */
 
 struct vnode;
 
@@ -50,6 +54,14 @@ struct vnode;
  *
  * You write this.
  */
+
+ /* 
+  * Page Table Struct
+  * Essentially an 10-bit array of integers.
+  */
+ struct page_table {
+  int table[1024];
+ };
 
 struct addrspace {
 #if OPT_DUMBVM
@@ -63,18 +75,23 @@ struct addrspace {
 #else
         /* Put stuff here for your VM system */
 
-        /* Page Directory */
-        int page_dir[1024];
-        /* Page Table */
-        int page_table[1024]; 
+        /* Page Directory. Must be a FIXED PAGE. However, it's elements may be paged to disk. */
+        struct page_table *page_dir[1024];
 
-        /* TODO */
-        /*
-        Stuff to ADD:
-        User code or date segment
-        User heap, between heap_start and heap_end
-        User stack
-        */
+        /* 3 Segments from LoadELF */ 
+
+        /* Code Segment */
+        vaddr_t code;
+        /* Read-Only Data Segment (Initialized Variables) */
+        vaddr_t ro_data;
+        /* Read_Write Data (Initialized Variables) / BSS Segment (Uninitialized Variables) */
+        vaddr_t databss;
+
+        /* Heap Start & End */
+        vaddr_t heap_start;
+        vaddr_t heap_end;
+        /* User Stack */
+        vaddr_t stack;ß
 #endif
 };
 
