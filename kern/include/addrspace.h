@@ -55,6 +55,22 @@ struct vnode;
  * You write this.
  */
 
+ /* Stack Layout
+ * |  Stack Top (grows down)  |
+ * |                          |              
+ * |                          |
+ * |                          |
+ * |                          |
+ * |                          |
+ * |                          |
+ * |         ^                |
+ * |     HEAP (grows up)      |
+ * | UNINITIALIZED VARS (BSS) |
+ * |  INITIALIZED VARS (RW)   |
+ * |  INITIALIZED VARS (RO)   |
+ * |          CODE            | 
+*/
+
  /* 
   * Page Table Struct
   * Essentially an 10-bit array of integers.
@@ -90,7 +106,7 @@ struct addrspace {
         /* Heap Start & End */
         vaddr_t heap_start;
         vaddr_t heap_end;
-        
+
         /* User Stack */
         vaddr_t stack;
 #endif
