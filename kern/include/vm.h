@@ -52,9 +52,12 @@
  } page_state_t;
 
  struct page {
- 	/* Where the page is mapped to */
+ 	/* Where the page is mapped to */		
  	struct addrspace* as;
  	vaddr_t va;
+
+ 	/* Location in physical memory*/
+ 	paddr_t pa;
 
  	/* Number of pages allocated (currently used by  kpage_nalloc) */
  	size_t npages;
@@ -72,6 +75,18 @@ int vm_fault(int faulttype, vaddr_t faultaddress);
 /* Allocate/free kernel heap pages (called by kmalloc/kfree) */
 vaddr_t alloc_kpages(int npages);
 void free_kpages(vaddr_t addr);
+
+/* Allocate a Page. Called by method above & by the address space*/
+vaddr_t page_alloc(struct addrspace *as);
+
+/* Given an address space & and a virtual address, get a page table*/
+struct page_table * pgdir_walk(struct addrspace *as, vaddr_t va, bool shouldcreate);
+
+/* Given a page table entry, return a page */
+struct page * get_page(int pte);
+
+/* Copy a page */
+void copy_page(struct page *src, struct page *dst);
 
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown_all(void);

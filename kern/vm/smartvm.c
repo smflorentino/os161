@@ -4,6 +4,7 @@
 */
 
 #include <types.h>
+#include <kern/errno.h>
 #include <lib.h>
 #include <vm.h>
 #include <machine/vm.h>
@@ -12,6 +13,10 @@
 #include <uio.h>
 #include <kern/iovec.h>
 #include <synch.h>
+#include <addrspace.h>
+#include <mips/tlb.h>
+#include <current.h>
+#include <spl.h>
 /*
  * Wrap rma_stealmem in a spinlock.
  */
@@ -93,11 +98,77 @@ void vm_bootstrap()
 }
 
 /* Fault handling function called by trap code */
+//TODO permissions.
 int vm_fault(int faulttype, vaddr_t faultaddress) 
 {
 	(void)faulttype;
 	(void)faultaddress;
+	struct addrspace *as = curthread->t_addrspace;
+	struct page_table *pt = pgdir_walk(as,faultaddress,false);
+	int pt_index = VA_TO_PT_INDEX(faultaddress);
+	int PFN = PTE_TO_PFN(pt->table[pt_index]);
+
+	uint32_t ehi,elo;
+
+	/* Disable interrupts on this CPU while frobbing the TLB. */
+	int spl = splhigh();
+
+	for (int i=0; i<NUM_TLB; i++) {
+		tlb_read(&ehi, &elo, i);
+		if (elo & TLBLO_VALID) {
+			continue;
+		}
+		ehi = faultaddress;
+		elo = PFN | TLBLO_VALID;
+		DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, PFN);
+		tlb_write(ehi, elo, i);
+		splx(spl);
+		return 0;
+	}
+
+	kprintf("dumbvm: Ran out of TLB entries - cannot handle page fault\n");
+	splx(spl);
+	return EFAULT;
+
+
 	return 0;
+}
+
+/* Given a virtual address & an address space, return the page table from the page directory */
+struct page_table *
+pgdir_walk(struct addrspace *as, vaddr_t va, bool create)
+{
+	struct page_table* pt;
+	//Get the top 10 bits from the virtual address to index the PD.
+	int pd_index = VA_TO_PD_INDEX(va);
+	//Get the page table in the page directory, using index we just made
+	pt = as->page_dir[pd_index];
+	if(pt == NULL && create)
+	{
+		//Store the location of the page table in the page directory;
+		pt = kmalloc(sizeof(struct page_table));
+		as->page_dir[pd_index] = pt;
+	}
+	return pt;
+}
+
+/* Given a page table entry, return the page*/
+//TOOO check if page is swapped in or not
+//if its on disk, get it.
+struct page *
+get_page(int pte)
+{
+	/* Get the physical "address" of the
+	page (upper 20 bits of PTE)*/
+	pte = pte >> 20;
+	return &core_map[pte];
+}
+
+/* Copy the contents of a page */
+void
+copy_page(struct page *src, struct page *dst)
+{
+	memcpy(dst,src,sizeof(struct page));
 }
 
 static
@@ -140,7 +211,7 @@ zero_page(size_t page_num)
 	memset((void*) ptr,'\0',PAGE_SIZE);
 }
 
-/* Called by kpage_alloc and kpage_nalloc */
+/* Called by kpage_alloc and page_nalloc for KERNEL pages*/
 static
 void 
 allocate_fixed_page(size_t page_num)
@@ -152,6 +223,17 @@ allocate_fixed_page(size_t page_num)
 	core_map[page_num].as = NULL;
 	zero_page(page_num);
 	KASSERT(core_map[page_num].va != 0);
+}
+
+static
+void
+allocate_nonfixed_page(size_t page_num, struct addrspace *as)
+{
+	core_map[page_num].state = DIRTY;
+	paddr_t pa = page_num * PAGE_SIZE;
+	core_map[page_num].va = PADDR_TO_KVADDR(pa);
+	core_map[page_num].as = as;
+	zero_page(page_num);
 }
 
 /* Called by free_kpages */
@@ -168,16 +250,22 @@ free_fixed_page(size_t page_num)
 	}
 }
 
-static
 vaddr_t
-kpage_alloc()
+page_alloc(struct addrspace* as)
 {
 	spinlock_acquire(&stealmem_lock);
 	for(size_t i = 0;i<page_count;i++)
 	{
 		if(core_map[i].state == FREE)
 		{
-			allocate_fixed_page(i);
+			if(as == NULL)
+			{
+				allocate_fixed_page(i);				
+			}
+			else
+			{
+				allocate_nonfixed_page(i,as);
+			}
 			core_map[i].npages = 1;
 			spinlock_release(&stealmem_lock);
 			return core_map[i].va;
@@ -190,7 +278,7 @@ kpage_alloc()
 
 static
 vaddr_t
-kpage_nalloc(int npages)
+page_nalloc(int npages)
 {
 	spinlock_acquire(&stealmem_lock);
 	bool blockStarted = false;
@@ -221,8 +309,8 @@ kpage_nalloc(int npages)
 				allocate_fixed_page(j);
 			}
 			core_map[startingPage].npages = npages;
-			return core_map[startingPage].va;
 			spinlock_release(&stealmem_lock);
+			return core_map[startingPage].va;
 		}
 	}
 	spinlock_release(&stealmem_lock);
@@ -244,10 +332,10 @@ vaddr_t alloc_kpages(int npages)
 		return PADDR_TO_KVADDR(pa);
 	}
 	if(npages == 1) {
-		return kpage_alloc();
+		return page_alloc(NULL);
 	}
 	else if(npages > 1) {
-		return kpage_nalloc(npages);
+		return page_nalloc(npages);
 	}
 	else {
 		panic("alloc_kpages called with negiatve page count!");
@@ -257,7 +345,7 @@ vaddr_t alloc_kpages(int npages)
 }
 
 /* Free kernel heap pages (called by kfree) */
-/* Only works for pages that are in a  contiguous block */
+/* Only works for pages that are in a contiguous block */
 void free_kpages(vaddr_t addr)
 {
 	if(addr < 0x80000000)

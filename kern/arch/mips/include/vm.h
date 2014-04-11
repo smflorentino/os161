@@ -67,6 +67,20 @@
  */
 #define PADDR_TO_KVADDR(paddr) ((paddr)+MIPS_KSEG0)
 
+#define KVADDR_TO_PADDR(vaddr) ((vaddr)-MIPS_KSEG0)
+
+#define PAGEVA_TO_PTE(vaddr) (((KVADDR_TO_PADDR(vaddr))<<20))
+
+//Get the 10 bits by shifting right 22.
+#define VA_TO_PD_INDEX(vaddr) ((vaddr) >> 22)
+
+//Get middle 10 bits by applying 10bit mask to upper 10 bits, and then shift left by 12.
+#define VA_TO_PT_INDEX(vaddr) (((vaddr) & 0x400000) >> 12)
+
+//Get the physical frame number (top 20 bits) from a PTE. (basically the coremap index)
+//Remove the lower 12 bits via a mask, then shift left by 12.
+#define PTE_TO_PFN(pte) ((pte & 0xFFFFF000) >> 12)
+
 /*
  * The top of user space. (Actually, the address immediately above the
  * last valid user address.)

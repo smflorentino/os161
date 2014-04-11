@@ -40,6 +40,9 @@
 
 // CJO: arbitrarily defined, to be changed when we layout our address space
 #define   HEAP_MAX    0x10000000
+
+#define PAGE_DIR_ENTRIES 1024
+#define PAGE_TABLE_ENTRIES 1024
 /* Essentially we could do...
 int *page_dir[1024]
 each of which ^ would point to a 1024-element int array.
@@ -74,6 +77,7 @@ struct vnode;
  /* 
   * Page Table Struct
   * Essentially an 10-bit array of integers.
+  * Currently will occupy a FIXED page, for simplicity's sake.
   */
  struct page_table {
   int table[1024];
@@ -92,22 +96,14 @@ struct addrspace {
         /* Put stuff here for your VM system */
 
         /* Page Directory. Must be a FIXED PAGE. However, it's elements may be paged to disk. */
+        /* Just Kidding. Per GWA we can keep page tables in FIXED memory for simplicty's sake.*/
         struct page_table *page_dir[1024];
 
-        /* 3 Segments from LoadELF */ 
-
-        /* Code Segment */
-        vaddr_t code;
-        /* Read-Only Data Segment (Initialized Variables) */
-        vaddr_t ro_data;
-        /* Read_Write Data (Initialized Variables) / BSS Segment (Uninitialized Variables) */
-        vaddr_t databss;
-
-        /* Heap Start & End */
+        // /* Heap Start & End */
         vaddr_t heap_start;
         vaddr_t heap_end;
 
-        /* User Stack */
+        // /* User Stack */
         vaddr_t stack;
 #endif
 };

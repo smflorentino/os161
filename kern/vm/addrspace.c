@@ -32,6 +32,8 @@
 #include <lib.h>
 #include <addrspace.h>
 #include <vm.h>
+#include <mips/tlb.h>
+#include <spl.h>
 
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
@@ -48,6 +50,9 @@ as_create(void)
 	if (as == NULL) {
 		return NULL;
 	}
+
+	as->heap_start = 0x0;
+	as->heap_end = 0x7FFFFFFF;
 
 	/*
 	 * Initialize as needed.
@@ -66,11 +71,44 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		return ENOMEM;
 	}
 
-	/*
-	 * Write this.
-	 */
-
-	(void)old;
+	//Go through entries in page directory.
+	for(size_t i = 0;i<PAGE_DIR_ENTRIES;i++)
+	{
+		//Get current entry in page directory.
+		struct page_table *oldpt =  old->page_dir[i];
+		//Page directory at index i points to a page table.
+		if(oldpt != NULL)
+		{
+			//Create a new page table, and assign it.
+			struct page_table *newpt = kmalloc(sizeof (struct page_table));
+			newas->page_dir[i] = newpt;
+			//Now iterate through each entry in the page table.
+			//If a page exists, copy it; and update hte new table.
+			for(size_t pte = 0; pte< PAGE_TABLE_ENTRIES;pte++)
+			{
+				int pt_entry = oldpt->table[pte];
+				//Page Table Entry exists
+				if(pt_entry != 0x0)
+				{
+					struct page *oldpage = get_page(pt_entry);
+					struct page *newpage = (struct page *) page_alloc(newas);
+					copy_page(oldpage, newpage);
+					//Convert location of page to a page table entry.
+					int new_pt_entry = PAGEVA_TO_PTE(newpage->va);
+					newpt->table[pte] = new_pt_entry;
+					//TODO permissions
+				}
+				else //No page at Page Table entry 'pte'
+				{
+					newpt->table[pte] = 0x0;
+				}
+			}
+		}
+		else //Page Table does not exist at this index.
+		{
+				newas->page_dir[i] = NULL;
+		}
+	}
 	
 	*ret = newas;
 	return 0;
@@ -79,21 +117,53 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 void
 as_destroy(struct addrspace *as)
 {
-	/*
-	 * Clean up as needed.
-	 */
-	
+	//Go through each entry in the page directory.
+	for(size_t i = 0;i<PAGE_DIR_ENTRIES;i++)
+	{
+		//Get current entry in page directory.
+		struct page_table *pt = as->page_dir[i];
+		//If a page table exists in this entry, go through all page in that table.
+		if(pt != NULL)
+		{
+			for(size_t j=0;j<PAGE_TABLE_ENTRIES;j++)
+			{
+				int pt_entry = pt->table[j];
+				//If a page exists at this entry in the table, free it.
+				if(pt_entry != 0x0)
+				{
+					struct page *page = get_page(pt_entry);
+					free_kpages(page->va);
+				}
+			}
+			//Now, delete the page table. //TODO create a destory method??
+			kfree(pt);
+		}
+	}
+	//Now, delete the page directory.
+	kfree(as->page_dir);
+	//Now, delete the address space.
 	kfree(as);
 }
 
+/* Shamelessly stolen from dumbvm.
+ * It *should* simply invalidate all TLB entries.
+ * We'll find out.
+ */
 void
 as_activate(struct addrspace *as)
 {
-	/*
-	 * Write this.
-	 */
+	int i, spl;
 
-	(void)as;  // suppress warning until code gets written
+	(void)as;
+
+	/* Disable interrupts on this CPU while frobbing the TLB. */
+	spl = splhigh();
+
+	for (i=0; i<NUM_TLB; i++) {
+		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+	}
+
+	splx(spl);
 }
 
 /*
@@ -110,17 +180,31 @@ int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		 int readable, int writeable, int executable)
 {
-	/*
-	 * Write this.
-	 */
+	size_t pages_required = sz / PAGE_SIZE;
+	vaddr_t cur_vaddr = vaddr;
+	for(size_t i = 0; i < pages_required; i++)
+	{
+		//Allocate a page. //TODO implement on-demand paging.
+		vaddr_t page_va = page_alloc(as);
+		
+		//Get the page table for the virtual address.
+		struct page_table *pt = pgdir_walk(as,cur_vaddr,true);
 
-	(void)as;
-	(void)vaddr;
-	(void)sz;
+		//Update the page table entry to point to the page we made.
+		size_t pt_index = VA_TO_PT_INDEX(cur_vaddr);
+		pt->table[pt_index] = PAGEVA_TO_PTE(page_va);
+		//TODO permissions too
+
+		cur_vaddr += PAGE_SIZE;
+	}
+	//Heap Moves up as we define each region
+	as->heap_start += sz;
+
+	//TODO
 	(void)readable;
 	(void)writeable;
 	(void)executable;
-	return EUNIMP;
+	return 0;
 }
 
 int
