@@ -106,7 +106,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	struct addrspace *as = curthread->t_addrspace;
 	struct page_table *pt = pgdir_walk(as,faultaddress,false);
 	int pt_index = VA_TO_PT_INDEX(faultaddress);
-	int PFN = PTE_TO_PFN(pt->table[pt_index]);
+	int pfn = PTE_TO_PFN(pt->table[pt_index]);
 
 	uint32_t ehi,elo;
 
@@ -119,8 +119,8 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 			continue;
 		}
 		ehi = faultaddress;
-		elo = PFN | TLBLO_VALID;
-		DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, PFN);
+		elo = pfn | TLBLO_DIRTY | TLBLO_VALID;
+		DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, pfn);
 		tlb_write(ehi, elo, i);
 		splx(spl);
 		return 0;
