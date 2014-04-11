@@ -199,6 +199,9 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	}
 	//Heap Moves up as we define each region
 	as->heap_start += sz;
+	kprintf("Region VA:%p\n", (void*) vaddr);
+	kprintf("Region SZ:%d\n",sz);
+	kprintf("RWX:%d%d%d\n",readable,writeable,executable);
 
 	//TODO
 	(void)readable;
@@ -237,7 +240,7 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	 */
 
 	(void)as;
-
+	as->stack = (vaddr_t) USERSTACK;
 	/* Initial user-level stack pointer */
 	*stackptr = USERSTACK;
 	

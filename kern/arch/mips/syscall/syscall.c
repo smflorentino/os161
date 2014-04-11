@@ -146,6 +146,11 @@ syscall(struct trapframe *tf)
 				 (userptr_t)tf->tf_a1);
 		break;
 
+		/*S Brake*/
+		case SYS_sbrk:
+			err = sys_sbrk((intptr_t) tf->tf_a0, &retval);
+		break;
+
 		/*Open*/
 		case SYS_open:
 			err = sys_open((char*) tf->tf_a0, (int) tf->tf_a1, &retval);
@@ -403,6 +408,46 @@ check_open_fd(int fd, struct process* proc)
  	}
  	return 0;
  }
+
+ int
+sys_sbrk(intptr_t amount, int *retval)
+{
+	
+	amount++;
+	retval = NULL;
+	
+	/*
+	// Check that amount it page-aligned.
+	if(amount%4) {
+		// Round up to increments of 4 bytes.
+		amount += 4 - (amount%4);
+	}
+
+	// Get the current location of the heap.
+	void* current_heap = curthread->t_addrspace->as_heap_end;
+
+	// Combine heap location with amount.
+	void* new_heap = current_heap + amount;
+
+	// Check that new heap value does not go less than heap start.
+	if((int)new_heap < curthread->t_addrspace->as_heap_start) {
+		return EINVAL;
+	}
+
+	// Check that new heap value does not go past heap max.
+	if((int)new_heap > HEAP_MAX) {
+		return ENOMEM;
+	}
+
+	// Set new heap value.
+	curthread->t_addrspace->as_heap_end = new_heap;
+
+	// Return pointer to new address location
+	retval = (int*)curthread->t_addrspace;
+	*/
+
+	return 0;
+}
 
 int
 sys_open(char* filename, int flags, int *retval)
