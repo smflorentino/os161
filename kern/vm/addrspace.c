@@ -185,6 +185,10 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	{
 		pages_required = 1;
 	}
+	else if(sz % PAGE_SIZE != 0)
+	{
+		pages_required++;
+	}
 	vaddr_t cur_vaddr = vaddr;
 	for(size_t i = 0; i < pages_required; i++)
 	{
@@ -199,6 +203,8 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		//Update the page table entry to point to the page we made.
 		size_t pt_index = VA_TO_PT_INDEX(cur_vaddr);
 		pt->table[pt_index] = PAGEVA_TO_PTE(page_va);
+		DEBUG(DB_VM,"Page VA:%p\n", (void*) cur_vaddr);
+		DEBUG(DB_VM,"Page PA:%p\n", (void*) KVADDR_TO_PADDR(page_va));
 		// kprintf("Page VA: %p\n",(void*) page_va);
 		// kprintf("Page PA: %p\n",(void*) KVADDR_TO_PADDR(page_va));
 		// kprintf("PTE: %d\n", PAGEVA_TO_PTE(page_va));
@@ -208,6 +214,10 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	}
 	//Heap Moves up as we define each region
 	as->heap_start += sz;
+	DEBUG(DB_VM,"Region VA: %p\n",(void*) vaddr);
+	DEBUG(DB_VM,"Region SZ: %d\n", sz);
+	DEBUG(DB_VM,"Page Count: %d\n",pages_required);
+	DEBUG(DB_VM,"RWX: %d%d%d\n", readable,writeable,executable);
 	// kprintf("Region VA:%p\n", (void*) vaddr);
 	// kprintf("Region SZ:%d\n",sz);
 	// kprintf("RWX:%d%d%d\n",readable,writeable,executable);
