@@ -102,11 +102,13 @@ void vm_bootstrap()
 int vm_fault(int faulttype, vaddr_t faultaddress) 
 {
 	(void)faulttype;
-	(void)faultaddress;
+	faultaddress &= PAGE_FRAME;
 	struct addrspace *as = curthread->t_addrspace;
 	struct page_table *pt = pgdir_walk(as,faultaddress,false);
 	int pt_index = VA_TO_PT_INDEX(faultaddress);
 	int pfn = PTE_TO_PFN(pt->table[pt_index]);
+
+	KASSERT(pfn >= 0);
 
 	uint32_t ehi,elo;
 
@@ -116,10 +118,13 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	for (int i=0; i<NUM_TLB; i++) {
 		tlb_read(&ehi, &elo, i);
 		if (elo & TLBLO_VALID) {
+			// kprintf("Index %d in use\n",i);
 			continue;
 		}
 		ehi = faultaddress;
 		elo = pfn | TLBLO_DIRTY | TLBLO_VALID;
+		// kprintf("Writing TLB Index %d\n",i); 
+		// kprintf("dumbvm: 0x%x -> 0x%x\n", faultaddress, pfn);
 		DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, pfn);
 		tlb_write(ehi, elo, i);
 		splx(spl);
@@ -354,6 +359,7 @@ void free_kpages(vaddr_t addr)
 	}
 	spinlock_acquire(&stealmem_lock);
 	// kprintf("Freeing VA:%p\n", (void*) addr);
+	KASSERT(page_count > 0);
 	for(size_t i = 0;i<page_count;i++)
 	{
 		if(core_map[i].va == addr)

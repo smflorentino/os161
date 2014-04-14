@@ -1074,7 +1074,6 @@ sys_fork(struct trapframe *tf, int* retval)
 int
 kern_sys_waitpid(pid_t pid, int* status, int options, int* retval)
 {
-	kprintf("about to wait on %d\n", pid);
 	pid_t curpid = curthread->t_pid; /*getpid()*/
 	//We don't support any "options"
 	if(options != 0)

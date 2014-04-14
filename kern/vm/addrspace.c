@@ -140,7 +140,7 @@ as_destroy(struct addrspace *as)
 		}
 	}
 	//Now, delete the page directory.
-	kfree(as->page_dir);
+	// kfree(as->page_dir);
 	//Now, delete the address space.
 	kfree(as);
 }
@@ -181,6 +181,10 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		 int readable, int writeable, int executable)
 {
 	size_t pages_required = sz / PAGE_SIZE;
+	if(sz < PAGE_SIZE)
+	{
+		pages_required = 1;
+	}
 	vaddr_t cur_vaddr = vaddr;
 	for(size_t i = 0; i < pages_required; i++)
 	{
@@ -189,19 +193,24 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		
 		//Get the page table for the virtual address.
 		struct page_table *pt = pgdir_walk(as,cur_vaddr,true);
+		KASSERT(pt != NULL);
+		KASSERT(pt != 0x0);
 
 		//Update the page table entry to point to the page we made.
 		size_t pt_index = VA_TO_PT_INDEX(cur_vaddr);
 		pt->table[pt_index] = PAGEVA_TO_PTE(page_va);
+		// kprintf("Page VA: %p\n",(void*) page_va);
+		// kprintf("Page PA: %p\n",(void*) KVADDR_TO_PADDR(page_va));
+		// kprintf("PTE: %d\n", PAGEVA_TO_PTE(page_va));
 		//TODO permissions too
 
 		cur_vaddr += PAGE_SIZE;
 	}
 	//Heap Moves up as we define each region
 	as->heap_start += sz;
-	kprintf("Region VA:%p\n", (void*) vaddr);
-	kprintf("Region SZ:%d\n",sz);
-	kprintf("RWX:%d%d%d\n",readable,writeable,executable);
+	// kprintf("Region VA:%p\n", (void*) vaddr);
+	// kprintf("Region SZ:%d\n",sz);
+	// kprintf("RWX:%d%d%d\n",readable,writeable,executable);
 
 	//TODO
 	(void)readable;
@@ -240,7 +249,23 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	 */
 
 	(void)as;
-	as->stack = (vaddr_t) USERSTACK;
+	as->stack = (vaddr_t) USERSTACK - PAGE_SIZE;
+	//Allocate a page for the stack.
+	vaddr_t stack_page_va = page_alloc(as);
+	// kprintf("Allocating page for stack...\n");
+	//Get the page table for the virtual address.
+	struct page_table *pt = pgdir_walk(as,as->stack,true);
+	KASSERT(pt != NULL);
+	KASSERT(pt != 0x0);
+
+	//Update the page table entry to point to the page we made.
+	size_t pt_index = VA_TO_PT_INDEX(as->stack);
+	pt->table[pt_index] = PAGEVA_TO_PTE(stack_page_va);
+	// kprintf("VA: %p\n",(void*) stackptr);
+	// kprintf("Page PA: %p\n",(void*) KVADDR_TO_PADDR(stack_page_va));
+	// kprintf("PTE: %d\n", PAGEVA_TO_PTE(stack_page_va));
+	//TODO permissions too
+
 	/* Initial user-level stack pointer */
 	*stackptr = USERSTACK;
 	
