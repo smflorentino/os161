@@ -416,9 +416,6 @@ check_open_fd(int fd, struct process* proc)
 int
 sys_sbrk(intptr_t amount, void* retval_sbrk)
 {
-	(void) amount;
-	(void) retval;
-	/*
 	//amount++;
 	//retval = NULL;
 	// Check that amount it page-aligned.
@@ -448,7 +445,6 @@ sys_sbrk(intptr_t amount, void* retval_sbrk)
 
 	// Return pointer to old heap break point
 	retval_sbrk = (void*)current_heap;
-	*/
 	return 0;
 }
 
