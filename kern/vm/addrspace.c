@@ -51,9 +51,6 @@ as_create(void)
 		return NULL;
 	}
 
-	as->heap_start = 0x0;
-	as->heap_end = 0x7FFFFFFF;
-
 	/*
 	 * Initialize as needed.
 	 */
@@ -90,11 +87,15 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 				//Page Table Entry exists
 				if(pt_entry != 0x0)
 				{
+					//Locate the old page
 					struct page *oldpage = get_page(pt_entry);
-					struct page *newpage = (struct page *) page_alloc(newas);
-					copy_page(oldpage, newpage);
-					//Convert location of page to a page table entry.
-					int new_pt_entry = PAGEVA_TO_PTE(newpage->va);
+					//Allocate a new page
+					vaddr_t new_page_va = page_alloc(newas);
+					//Copy the data:
+					memcpy((void*) new_page_va, (void*) oldpage->va,PAGE_SIZE);
+
+					//Update the new page table accordingly:
+					int new_pt_entry = PAGEVA_TO_PTE(new_page_va);
 					newpt->table[pte] = new_pt_entry;
 					//TODO permissions
 				}
@@ -189,6 +190,14 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	{
 		pages_required++;
 	}
+	//Adjust the start of the heap.
+	vaddr_t seg_end = vaddr + pages_required * PAGE_SIZE;
+	if(seg_end > as->heap_start)
+	{
+		as->heap_start = seg_end;
+		as->heap_end = as->heap_start;
+	}
+
 	vaddr_t cur_vaddr = vaddr;
 	for(size_t i = 0; i < pages_required; i++)
 	{
@@ -212,11 +221,12 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 
 		cur_vaddr += PAGE_SIZE;
 	}
+
 	//Heap Moves up as we define each region
 	as->heap_start += sz;
 	//Also define the end of heap
 	as->heap_end = as->heap_start;
-	
+
 	DEBUG(DB_VM,"Region VA: %p\n",(void*) vaddr);
 	DEBUG(DB_VM,"Region SZ: %d\n", sz);
 	DEBUG(DB_VM,"Page Count: %d\n",pages_required);
@@ -274,6 +284,8 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	//Update the page table entry to point to the page we made.
 	size_t pt_index = VA_TO_PT_INDEX(as->stack);
 	pt->table[pt_index] = PAGEVA_TO_PTE(stack_page_va);
+	DEBUG(DB_VM, "Heap End: %p\n", (void*) as->heap_end);
+	DEBUG(DB_VM,"Stack:%p\n",(void*) as->stack);
 	// kprintf("VA: %p\n",(void*) stackptr);
 	// kprintf("Page PA: %p\n",(void*) KVADDR_TO_PADDR(stack_page_va));
 	// kprintf("PTE: %d\n", PAGEVA_TO_PTE(stack_page_va));
