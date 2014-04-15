@@ -41,6 +41,10 @@
 #include <err.h>
 #include <stdint.h>  // for uintptr_t on non-OS/161 platforms
 
+// Added to debug sbrk and malloc
+//#include <stdio.h>
+//
+
 #undef MALLOCDEBUG
 
 #if defined(__mips__) || defined(__i386__)
@@ -168,6 +172,7 @@ __malloc_init(void)
 	}
 
 	/* Use sbrk to find the base of the heap. */
+	//printf("init\n");
 	x = sbrk(0);
 	if (x==(void *)-1) {
 		err(1, "malloc: initial sbrk failed");
@@ -337,6 +342,7 @@ malloc(size_t size)
 	size_t rightprevblock;
 
 	if (__heapbase==0) {
+		//printf("Initalizing malloc\n");
 		__malloc_init();
 	}
 	if (__heapbase==0 || __heaptop==0 || __heapbase > __heaptop) {
@@ -352,8 +358,9 @@ malloc(size_t size)
 #endif
 
 	/* Round size up to an integral number of blocks. */
+	//printf("Inital malloc size: %d\n", size);
 	size = ((size + MBLOCKSIZE - 1) & ~(size_t)(MBLOCKSIZE-1));
-
+	//printf("Rounded malloc size: %d\n", size);
 	/*
 	 * First-fit search algorithm for available blocks.
 	 * Check to make sure the next/previous sizes all agree.

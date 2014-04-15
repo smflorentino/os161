@@ -214,6 +214,9 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	}
 	//Heap Moves up as we define each region
 	as->heap_start += sz;
+	//Also define the end of heap
+	as->heap_end = as->heap_start;
+	
 	DEBUG(DB_VM,"Region VA: %p\n",(void*) vaddr);
 	DEBUG(DB_VM,"Region SZ: %d\n", sz);
 	DEBUG(DB_VM,"Page Count: %d\n",pages_required);
