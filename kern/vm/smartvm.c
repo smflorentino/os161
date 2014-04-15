@@ -104,6 +104,19 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	(void)faulttype;
 	faultaddress &= PAGE_FRAME;
 	struct addrspace *as = curthread->t_addrspace;
+	if(faultaddress < as->stack && faultaddress > as->heap_end)
+	{
+		as->stack -= PAGE_SIZE;
+		struct page_table *pt = pgdir_walk(as,as->stack,true);
+		vaddr_t stack_page_va = page_alloc(as);
+		//Update the page table entry to point to the page we made.
+		size_t pt_index = VA_TO_PT_INDEX(as->stack);
+		pt->table[pt_index] = PAGEVA_TO_PTE(stack_page_va);
+	}
+	else
+	{
+
+	}
 	struct page_table *pt = pgdir_walk(as,faultaddress,false);
 	int pt_index = VA_TO_PT_INDEX(faultaddress);
 	int pfn = PTE_TO_PFN(pt->table[pt_index]);
@@ -163,9 +176,8 @@ pgdir_walk(struct addrspace *as, vaddr_t va, bool create)
 struct page *
 get_page(int pte)
 {
-	/* Get the physical "address" of the
-	page (upper 20 bits of PTE)*/
-	pte = pte >> 20;
+	//PTE will be top 20 bits of physical address. .
+	pte = pte / PAGE_SIZE;
 	return &core_map[pte];
 }
 
@@ -249,10 +261,12 @@ free_fixed_page(size_t page_num)
 	// KASSERT(lock_do_i_hold(core_map_lock));
 	core_map[page_num].state = FREE;
 	core_map[page_num].va = 0x0;
-	if(core_map[page_num].as != NULL)
-	{
-		panic("I don't know how to free page with an address space");
-	}
+	core_map[page_num].as =  NULL;
+	core_map[page_num].npages = 0;
+	// if(core_map[page_num].as != NULL)
+	// {
+	// 	panic("I don't know how to free page with an address space");
+	// }
 }
 
 vaddr_t
