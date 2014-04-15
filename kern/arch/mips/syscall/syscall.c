@@ -412,10 +412,8 @@ check_open_fd(int fd, struct process* proc)
  int
 sys_sbrk(intptr_t amount, int *retval)
 {
-	
-	amount++;
-	retval = NULL;
-	
+	(void) amount;
+	(void) retval;
 	/*
 	// Check that amount it page-aligned.
 	if(amount%4) {

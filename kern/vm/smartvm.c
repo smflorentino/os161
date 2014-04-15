@@ -104,6 +104,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	(void)faulttype;
 	faultaddress &= PAGE_FRAME;
 	struct addrspace *as = curthread->t_addrspace;
+	//If we're coming down the stack....
 	if(faultaddress < as->stack && faultaddress > as->heap_end)
 	{
 		as->stack -= PAGE_SIZE;
@@ -112,10 +113,6 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		//Update the page table entry to point to the page we made.
 		size_t pt_index = VA_TO_PT_INDEX(as->stack);
 		pt->table[pt_index] = PAGEVA_TO_PTE(stack_page_va);
-	}
-	else
-	{
-
 	}
 	struct page_table *pt = pgdir_walk(as,faultaddress,false);
 	int pt_index = VA_TO_PT_INDEX(faultaddress);

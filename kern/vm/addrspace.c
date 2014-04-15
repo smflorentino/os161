@@ -286,6 +286,14 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	// kprintf("PTE: %d\n", PAGEVA_TO_PTE(stack_page_va));
 	//TODO permissions too
 
+	//Align the heap on a page boundary:
+	int offset = as->heap_start % PAGE_SIZE;
+	if(offset != 0)
+	{
+		as->heap_start += (PAGE_SIZE - offset);
+		as->heap_end += (PAGE_SIZE -offset);
+	}
+
 	/* Initial user-level stack pointer */
 	*stackptr = USERSTACK;
 	
