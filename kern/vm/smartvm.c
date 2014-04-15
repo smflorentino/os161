@@ -114,6 +114,8 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		size_t pt_index = VA_TO_PT_INDEX(as->stack);
 		pt->table[pt_index] = PAGEVA_TO_PTE(stack_page_va);
 	}
+	//TODO if we're in the heap....
+	
 	struct page_table *pt = pgdir_walk(as,faultaddress,false);
 	int pt_index = VA_TO_PT_INDEX(faultaddress);
 	int pfn = PTE_TO_PFN(pt->table[pt_index]);
