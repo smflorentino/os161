@@ -41,6 +41,13 @@ main(int argc, char* argv[])
 {
 	(void)argc;
 	(void)argv;
-	printf("Hello World\n");
+	void* x;
+
+	printf("Hello World 1\n");
+	x = malloc(10);
+	x = malloc(10);
+	printf("x = %d\n", (int)x);
+	//x = x + 1;
+	printf("Hello World 2\n");
 	exit(0);
 }

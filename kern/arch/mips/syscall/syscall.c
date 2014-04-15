@@ -94,6 +94,7 @@ void
 syscall(struct trapframe *tf)
 {
 	int callno;
+	void *retval_sbrk;
 	int32_t retval;
 	int64_t retval64;
 	bool retval_is_32 = true;	// Indicates if the return values is a 32 bit or 64 bit.
@@ -148,7 +149,7 @@ syscall(struct trapframe *tf)
 
 		/*S Brake*/
 		case SYS_sbrk:
-			err = sys_sbrk((intptr_t) tf->tf_a0, &retval);
+			err = sys_sbrk((intptr_t) tf->tf_a0, (void*) retval_sbrk);
 		break;
 
 		/*Open*/
@@ -234,7 +235,10 @@ syscall(struct trapframe *tf)
 	}
 	else {
 		/* Success. */
-		if (retval_is_32){
+		if (callno == SYS_sbrk){
+			tf->tf_v0 = (int)retval_sbrk;		// retval, if sbrk called
+		}
+		else if (retval_is_32){
 			tf->tf_v0 = retval; 			/* retval, if appropriate for syscall */
 		}
 		else {
@@ -409,41 +413,42 @@ check_open_fd(int fd, struct process* proc)
  	return 0;
  }
 
- int
-sys_sbrk(intptr_t amount, int *retval)
+int
+sys_sbrk(intptr_t amount, void* retval_sbrk)
 {
 	(void) amount;
 	(void) retval;
 	/*
+	//amount++;
+	//retval = NULL;
 	// Check that amount it page-aligned.
 	if(amount%4) {
 		// Round up to increments of 4 bytes.
 		amount += 4 - (amount%4);
 	}
 
-	// Get the current location of the heap.
-	void* current_heap = curthread->t_addrspace->as_heap_end;
+	// Get the current location of the heap end.
+	vaddr_t current_heap = curthread->t_addrspace->heap_end;
 
 	// Combine heap location with amount.
-	void* new_heap = current_heap + amount;
+	vaddr_t new_heap = current_heap + amount;
 
 	// Check that new heap value does not go less than heap start.
-	if((int)new_heap < curthread->t_addrspace->as_heap_start) {
+	if(new_heap < curthread->t_addrspace->heap_start) {
 		return EINVAL;
 	}
 
 	// Check that new heap value does not go past heap max.
-	if((int)new_heap > HEAP_MAX) {
-		return ENOMEM;
-	}
+	//if(new_heap > HEAP_MAX) {
+	//	return ENOMEM;
+	//}
 
 	// Set new heap value.
-	curthread->t_addrspace->as_heap_end = new_heap;
+	curthread->t_addrspace->heap_end = new_heap;
 
-	// Return pointer to new address location
-	retval = (int*)curthread->t_addrspace;
+	// Return pointer to old heap break point
+	retval_sbrk = (void*)current_heap;
 	*/
-
 	return 0;
 }
 
