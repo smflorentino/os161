@@ -115,10 +115,11 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	{
 		return EFAULT;
 	}
-	if(faultaddress > as->heap_end && faultaddress < as->stack)
-	{
-		return EFAULT;
-	}
+	//TODO fix this
+	// if(faultaddress > as->heap_end && faultaddress < as->stack - (PAGE_SIZE))
+	// {
+	// 	return EFAULT;
+	// }
 	(void)faulttype;
 
 	//If we're coming down the stack....
@@ -140,15 +141,16 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 
 	//If PFN is 0, and we're inside the heap, could be that page
 	//was not allocated yet. Try to allocate it now.
-	if(pfn == 0 && faultaddress < as->stack && faultaddress >= as->heap_start)
-	{
-		page_alloc(as,faultaddress);
-	}
-	else if(pfn == 0)
-	{
-		//Invalid address
-		return EFAULT;
-	}
+	// if(pfn == 0 && faultaddress < as->stack && faultaddress >= as->heap_start)
+	// {
+	// 	page_alloc(as,faultaddress);
+	// }
+	
+	// if(pfn == 0)
+	// {
+	// 	//Invalid address
+	// 	return EFAULT;
+	// }
 	KASSERT(pfn >= 0);
 
 	uint32_t ehi,elo;
