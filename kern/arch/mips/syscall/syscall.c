@@ -375,8 +375,11 @@ static
 int
 check_valid_fd(int fd)
 {
-	if((fd < 0) || (fd >= OPEN_MAX))
-	{
+	if(fd < 0) {
+		//kprintf("Failed check fd with fd = %d.\n", fd);
+		return EBADF;
+	}
+	if(fd >= OPEN_MAX){
 		//kprintf("Failed check fd with fd = %d.\n", fd);
 		return EBADF;
 	}
