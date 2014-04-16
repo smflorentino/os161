@@ -148,15 +148,16 @@ static uintptr_t __heapbase, __heaptop;
 /*
  * Setup function.
  */
+
 static
 void
 __malloc_init(void)
 {
 	void *x;
 
-	/*
-	 * Check various assumed properties of the sizes.
-	 */
+	
+	// Check various assumed properties of the sizes.
+	 
 	if (sizeof(struct mheader) != MBLOCKSIZE) {
 		errx(1, "malloc: Internal error - MBLOCKSIZE wrong");
 	}
@@ -167,14 +168,14 @@ __malloc_init(void)
 		errx(1, "malloc: Internal error - MBLOCKSHIFT wrong");
 	}
 
-	/* init should only be called once. */
+	//init should only be called once. 
 	if (__heapbase!=0 || __heaptop!=0) {
 		errx(1, "malloc: Internal error - bad init call");
 	}
 
-	/* Use sbrk to find the base of the heap. */
-	//printf("init\n");
+	// Use sbrk to find the base of the heap. 
 	x = sbrk(0);
+
 	if (x==(void *)-1) {
 		err(1, "malloc: initial sbrk failed");
 	}
@@ -340,7 +341,6 @@ void *
 malloc(size_t size)
 {
 	//printf("Hello World in\n");
-
 	struct mheader *mh;
 	uintptr_t i;
 	size_t rightprevblock;
@@ -423,7 +423,11 @@ malloc(size_t size)
 	if (mh == NULL) {
 		return NULL;
 	}
-
+	/*
+	if (mh){
+		err(1, "malloc: initial sbrk failed");
+	}
+*/
 	mh->mh_prevblock = rightprevblock;
 	mh->mh_magic1 = MMAGIC;
 	mh->mh_magic2 = MMAGIC;
