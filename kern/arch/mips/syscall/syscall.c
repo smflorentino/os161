@@ -94,7 +94,7 @@ void
 syscall(struct trapframe *tf)
 {
 	int callno;
-	void *retval_sbrk;
+	uint32_t retval_sbrk;
 	int32_t retval;
 	int64_t retval64;
 	bool retval_is_32 = true;	// Indicates if the return values is a 32 bit or 64 bit.
@@ -149,7 +149,7 @@ syscall(struct trapframe *tf)
 
 		/*S Brake*/
 		case SYS_sbrk:
-			err = sys_sbrk((intptr_t) tf->tf_a0, (void*) retval_sbrk);
+			err = sys_sbrk((intptr_t) tf->tf_a0, &retval_sbrk);
 		break;
 
 		/*Open*/
@@ -236,7 +236,8 @@ syscall(struct trapframe *tf)
 	else {
 		/* Success. */
 		if (callno == SYS_sbrk){
-			tf->tf_v0 = (int)retval_sbrk;		// retval, if sbrk called
+			tf->tf_v0 = retval_sbrk;		// retval, if sbrk called
+			//tf->tf_v0 = (uint32_t)-1;		// retval, if sbrk called
 		}
 		else if (retval_is_32){
 			tf->tf_v0 = retval; 			/* retval, if appropriate for syscall */
@@ -414,9 +415,9 @@ check_open_fd(int fd, struct process* proc)
  }
 
 int
-sys_sbrk(intptr_t amount, void* retval_sbrk)
+sys_sbrk(intptr_t amount, uint32_t *retval_sbrk)
 {
-	//amount++;
+	DEBUG(DB_VM, "Amount to sbrk: %d\n", (int)amount);
 	//retval = NULL;
 	// Check that amount it page-aligned.
 	if(amount%4) {
@@ -426,7 +427,7 @@ sys_sbrk(intptr_t amount, void* retval_sbrk)
 
 	// Get the current location of the heap end.
 	vaddr_t current_heap = curthread->t_addrspace->heap_end;
-
+	DEBUG(DB_VM, "Current heap end: 0x%x\n", current_heap);
 	// Combine heap location with amount.
 	vaddr_t new_heap = current_heap + amount;
 
@@ -436,15 +437,18 @@ sys_sbrk(intptr_t amount, void* retval_sbrk)
 	}
 
 	// Check that new heap value does not go past heap max.
-	//if(new_heap > HEAP_MAX) {
-	//	return ENOMEM;
-	//}
+	if(new_heap > HEAP_MAX) {
+		return ENOMEM;
+	}
 
 	// Set new heap value.
 	curthread->t_addrspace->heap_end = new_heap;
+	DEBUG(DB_VM, "New heap end: 0x%x\n", new_heap);
 
 	// Return pointer to old heap break point
-	retval_sbrk = (void*)current_heap;
+	retval_sbrk = (uint32_t*)current_heap;
+	DEBUG(DB_VM, "Old heap end: 0x%x\n", (unsigned int)retval_sbrk);
+
 	return 0;
 }
 

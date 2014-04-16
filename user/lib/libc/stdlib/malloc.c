@@ -45,7 +45,8 @@
 //#include <stdio.h>
 //
 
-#undef MALLOCDEBUG
+//#undef MALLOCDEBUG
+#define MALLOCDEBUG
 
 #if defined(__mips__) || defined(__i386__)
 #define MALLOC32
@@ -270,6 +271,7 @@ __malloc_sbrk(size_t size)
 	void *x;
 
 	x = sbrk(size);
+	//err(1, "malloc: passed sbrk: 0x%x\n", (unsigned int)x);
 	if (x == (void *)-1) {
 		return NULL;
 	}
@@ -337,6 +339,8 @@ __malloc_split(struct mheader *mh, size_t size)
 void *
 malloc(size_t size)
 {
+	//printf("Hello World in\n");
+
 	struct mheader *mh;
 	uintptr_t i;
 	size_t rightprevblock;
