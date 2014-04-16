@@ -39,7 +39,7 @@
 #include "opt-dumbvm.h"
 
 // CJO: arbitrarily defined, to be changed when we layout our address space
-#define   HEAP_MAX    0x10000000
+//#define   HEAP_MAX    0x10000000
 
 #define PAGE_DIR_ENTRIES 1024
 #define PAGE_TABLE_ENTRIES 1024

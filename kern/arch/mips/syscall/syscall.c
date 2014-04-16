@@ -436,8 +436,9 @@ sys_sbrk(intptr_t amount, uint32_t *retval_sbrk)
 		return EINVAL;
 	}
 
-	// Check that new heap value does not go past heap max.
-	if(new_heap > HEAP_MAX) {
+	// Check that new heap value does not go past the stack.
+	vaddr_t current_stack = curthread->t_addrspace->stack;
+	if(new_heap >= current_stack) {
 		return ENOMEM;
 	}
 
