@@ -120,11 +120,18 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		// size_t pt_index = VA_TO_PT_INDEX(as->stack);
 		// pt->table[pt_index] = PAGEVA_TO_PTE(stack_page_va);
 	}
-	//TODO if we're in the heap....
 	
+	//Translate....
 	struct page_table *pt = pgdir_walk(as,faultaddress,false);
 	int pt_index = VA_TO_PT_INDEX(faultaddress);
 	int pfn = PTE_TO_PFN(pt->table[pt_index]);
+
+	//If PFN is 0, and we're inside the heap, could be that page
+	//was not allocated yet. Try to allocate it now.
+	if(pfn == 0 && faultaddress < as->stack && faultaddress >= as->heap_start)
+	{
+		page_alloc(as,faultaddress);
+	}
 
 	KASSERT(pfn >= 0);
 
