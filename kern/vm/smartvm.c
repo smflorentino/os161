@@ -106,9 +106,21 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	{
 		return EFAULT;
 	}
-	(void)faulttype;
 	faultaddress &= PAGE_FRAME;
 	struct addrspace *as = curthread->t_addrspace;
+	// DEBUG(DB_VM, "VA:%p\n", (void*) faultaddress);
+	// DEBUG(DB_VM, "St:%p\n", (void*) as->stack);
+	//Make sure address is valid
+	if(faultaddress >= 0x80000000)
+	{
+		return EFAULT;
+	}
+	if(faultaddress > as->heap_end && faultaddress < as->stack)
+	{
+		return EFAULT;
+	}
+	(void)faulttype;
+
 	//If we're coming down the stack....
 	if(faultaddress < as->stack && faultaddress > as->heap_end)
 	{
@@ -132,7 +144,11 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	{
 		page_alloc(as,faultaddress);
 	}
-
+	else if(pfn == 0)
+	{
+		//Invalid address
+		return EFAULT;
+	}
 	KASSERT(pfn >= 0);
 
 	uint32_t ehi,elo;

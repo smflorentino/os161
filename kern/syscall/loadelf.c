@@ -298,7 +298,7 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 	}
 
 	*entrypoint = eh.e_entry;
-	DEBUG(DB_VM,"LoadELFDone\n");
+	// DEBUG(DB_VM,"LoadELFDone\n");
 	// kprintf("LoadELF done\n");
 	return 0;
 }
