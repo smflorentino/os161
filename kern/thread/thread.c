@@ -155,7 +155,7 @@ thread_create(const char *name)
 
 	/* Process ID -1 for now*/
 	thread->t_pid = -1;
-	DEBUG(DB_VM, "NTN:%s\n", thread->t_name);
+	// DEBUG(DB_VM, "NTN:%s\n", thread->t_name);
 	/* If you add to struct thread, be sure to initialize here */
 
 	return thread;
@@ -244,7 +244,7 @@ thread_destroy(struct thread *thread)
 {
 	KASSERT(thread != curthread);
 	KASSERT(thread->t_state != S_RUN);
-	DEBUG(DB_VM, "DTName:%s",thread->t_name);	
+	// DEBUG(DB_VM, "DTName:%s",thread->t_name);	
 	/*
 	 * If you add things to struct thread, be sure to clean them up
 	 * either here or in thread_exit(). (And not both...)
@@ -495,7 +495,7 @@ thread_fork(const char *name,
 
 	/* Allocate a stack */
 	newthread->t_stack = kmalloc(STACK_SIZE);
-	DEBUG(DB_VM, "TSA:%p\n", newthread->t_stack);
+	// DEBUG(DB_VM, "TSA:%p\n", newthread->t_stack);
 
 	// kprintf("TSA|%p|\n",newthread->	t_stack);
 	if (newthread->t_stack == NULL) {

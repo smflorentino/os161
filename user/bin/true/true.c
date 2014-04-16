@@ -43,8 +43,8 @@ main(int argc, char* argv[])
 	(void)argv;
 	void* x;
 
-	printf("Hello World 1\n");
-	x = malloc(10);
+	printf("Hello World 50q000\n");
+	x = malloc(500000);
 	x = malloc(10);
 	printf("x = %d\n", (int)x);
 	//x = x + 1;

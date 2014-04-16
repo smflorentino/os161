@@ -77,7 +77,7 @@ vaddr_t alloc_kpages(int npages);
 void free_kpages(vaddr_t addr);
 
 /* Allocate a Page. Called by method above & by the address space*/
-vaddr_t page_alloc(struct addrspace *as);
+struct page * page_alloc(struct addrspace *as, vaddr_t va);
 
 /* Given an address space & and a virtual address, get a page table*/
 struct page_table * pgdir_walk(struct addrspace *as, vaddr_t va, bool shouldcreate);

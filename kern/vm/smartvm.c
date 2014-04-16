@@ -75,7 +75,8 @@ void vm_bootstrap()
 	{
 		// kprintf("Address of Core Map %d: %p ",i,&core_map[i]);
 		// kprintf("PA of Core Map %d:%p\n", i, (void*) (PAGE_SIZE * i));
-		core_map[i].va = PADDR_TO_KVADDR(i * PAGE_SIZE);
+		core_map[i].pa = i * PAGE_SIZE;
+		// core_map[i].va = PADDR_TO_KVADDR(i * PAGE_SIZE);
 		core_map[i].state = FIXED;
 		core_map[i].as = 0x0;
 	}
@@ -101,6 +102,10 @@ void vm_bootstrap()
 //TODO permissions.
 int vm_fault(int faulttype, vaddr_t faultaddress) 
 {
+	if(faultaddress == 0x0)
+	{
+		return EFAULT;
+	}
 	(void)faulttype;
 	faultaddress &= PAGE_FRAME;
 	struct addrspace *as = curthread->t_addrspace;
@@ -108,11 +113,12 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	if(faultaddress < as->stack && faultaddress > as->heap_end)
 	{
 		as->stack -= PAGE_SIZE;
-		struct page_table *pt = pgdir_walk(as,as->stack,true);
-		vaddr_t stack_page_va = page_alloc(as);
-		//Update the page table entry to point to the page we made.
-		size_t pt_index = VA_TO_PT_INDEX(as->stack);
-		pt->table[pt_index] = PAGEVA_TO_PTE(stack_page_va);
+		page_alloc(as,as->stack);
+		// struct page_table *pt = pgdir_walk(as,as->stack,true);
+		// vaddr_t stack_page_va = page_alloc(as);
+		// //Update the page table entry to point to the page we made.
+		// size_t pt_index = VA_TO_PT_INDEX(as->stack);
+		// pt->table[pt_index] = PAGEVA_TO_PTE(stack_page_va);
 	}
 	//TODO if we're in the heap....
 	
@@ -136,8 +142,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		ehi = faultaddress;
 		elo = pfn | TLBLO_DIRTY | TLBLO_VALID;
 		// kprintf("Writing TLB Index %d\n",i); 
-		// kprintf("dumbvm: 0x%x -> 0x%x\n", faultaddress, pfn);
-		DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, pfn);
+		// DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, pfn);
 		tlb_write(ehi, elo, i);
 		splx(spl);
 		return 0;
@@ -222,7 +227,7 @@ static
 void
 zero_page(size_t page_num)
 {
-	vaddr_t ptr = core_map[page_num].va;
+	vaddr_t ptr = PADDR_TO_KVADDR(core_map[page_num].pa);
 
 	memset((void*) ptr,'\0',PAGE_SIZE);
 }
@@ -235,20 +240,34 @@ allocate_fixed_page(size_t page_num)
 	// KASSERT(lock_do_i_hold(core_map_lock));
 	core_map[page_num].state = FIXED;
 	paddr_t pa = page_num * PAGE_SIZE;
-	core_map[page_num].va = PADDR_TO_KVADDR(pa);
+	core_map[page_num].pa = pa;
+	core_map[page_num].va = 0x0;
 	core_map[page_num].as = NULL;
 	zero_page(page_num);
-	KASSERT(core_map[page_num].va != 0);
 }
 
 static
 void
-allocate_nonfixed_page(size_t page_num, struct addrspace *as)
+allocate_nonfixed_page(size_t page_num, struct addrspace *as, vaddr_t va)
 {
+	//Allocate a page
 	core_map[page_num].state = DIRTY;
 	paddr_t pa = page_num * PAGE_SIZE;
-	core_map[page_num].va = PADDR_TO_KVADDR(pa);
+	core_map[page_num].pa = pa;
+	core_map[page_num].va = va;
 	core_map[page_num].as = as;
+
+	//Get the page table for the virtual address.
+	struct page_table *pt = pgdir_walk(as,va,true);
+
+	KASSERT(pt != NULL);
+	KASSERT(pt != 0x0);
+
+	//Update the page table entry to point to the page we made.
+	size_t pt_index = VA_TO_PT_INDEX(va);
+	vaddr_t page_location = PADDR_TO_KVADDR(core_map[page_num].pa);
+	pt->table[pt_index] = PAGEVA_TO_PTE(page_location	);
+
 	zero_page(page_num);
 }
 
@@ -268,25 +287,34 @@ free_fixed_page(size_t page_num)
 	// }
 }
 
-vaddr_t
-page_alloc(struct addrspace* as)
+struct page *
+page_alloc(struct addrspace* as, vaddr_t va)
 {
-	spinlock_acquire(&stealmem_lock);
+	bool holdlock = spinlock_do_i_hold(&stealmem_lock);
+	if(!holdlock)
+	{
+		spinlock_acquire(&stealmem_lock);
+	}
 	for(size_t i = 0;i<page_count;i++)
 	{
 		if(core_map[i].state == FREE)
 		{
 			if(as == NULL)
 			{
+				KASSERT(va == 0x0);
 				allocate_fixed_page(i);				
 			}
 			else
 			{
-				allocate_nonfixed_page(i,as);
+				KASSERT(va != 0x0);
+				allocate_nonfixed_page(i,as,va);
 			}
 			core_map[i].npages = 1;
-			spinlock_release(&stealmem_lock);
-			return core_map[i].va;
+			if(!holdlock)
+			{
+				spinlock_release(&stealmem_lock);
+			}
+			return &core_map[i];
 		}
 	}
 	spinlock_release(&stealmem_lock);
@@ -328,7 +356,7 @@ page_nalloc(int npages)
 			}
 			core_map[startingPage].npages = npages;
 			spinlock_release(&stealmem_lock);
-			return core_map[startingPage].va;
+			return PADDR_TO_KVADDR(core_map[startingPage].pa);
 		}
 	}
 	spinlock_release(&stealmem_lock);
@@ -350,7 +378,8 @@ vaddr_t alloc_kpages(int npages)
 		return PADDR_TO_KVADDR(pa);
 	}
 	if(npages == 1) {
-		return page_alloc(NULL);
+		struct page *kern_page = page_alloc(0x0,0x0);
+		return PADDR_TO_KVADDR(kern_page->pa);
 	}
 	else if(npages > 1) {
 		return page_nalloc(npages);
@@ -375,7 +404,9 @@ void free_kpages(vaddr_t addr)
 	KASSERT(page_count > 0);
 	for(size_t i = 0;i<page_count;i++)
 	{
-		if(core_map[i].va == addr)
+		vaddr_t page_location = PADDR_TO_KVADDR(core_map[i].pa);
+		// DEBUG(DB_VM, "Page locaion:%p\n", (void*) page_location);
+		if(addr == page_location)
 		{
 			// size_t target = i + core_map[i].npages;
 			for(size_t j = i; j<i+core_map[i].npages;j++)
@@ -387,7 +418,7 @@ void free_kpages(vaddr_t addr)
 			return;
 		}
 	}
-	panic("shouldnt get here");
+	panic("VA Doesn't exist!");
 }
 
 /* TLB shootdown handling called from interprocessor_interrupt */
