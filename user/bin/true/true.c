@@ -41,17 +41,13 @@ main(int argc, char* argv[])
 {
 	(void)argc;
 	(void)argv;
-	void *y;
-	void *z;
+	void *x;
+	printf("Hello World 50q000\n");
+	x = malloc(500000);
+	x = malloc(10);
+	printf("x = %d\n", (int)x);
+	//x = x + 1;
+	printf("Hello World 2\n");
 
-	//printf("Hello World 1\n");
-	//printf("Hello World 2\n");
-	y = malloc(1000);
-	z = malloc(1000);
-	//printf("z = 0x%x\n", (unsigned int)z);
-	//z = y + 1;
-	free(y);
-	free(z);
-	//printf("Hello World 3\n");
 	exit(0);
 }

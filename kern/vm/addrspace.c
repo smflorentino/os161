@@ -90,13 +90,17 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 					//Locate the old page
 					struct page *oldpage = get_page(pt_entry);
 					//Allocate a new page
-					vaddr_t new_page_va = page_alloc(newas);
+					struct page *newpage = page_alloc(newas,oldpage->va);
+					vaddr_t new_page_va = PADDR_TO_KVADDR(newpage->pa);
+					vaddr_t old_page_va = PADDR_TO_KVADDR(oldpage->pa);
 					//Copy the data:
-					memcpy((void*) new_page_va, (void*) oldpage->va,PAGE_SIZE);
+					memcpy((void*) new_page_va, (void*) old_page_va,PAGE_SIZE);
 
-					//Update the new page table accordingly:
-					int new_pt_entry = PAGEVA_TO_PTE(new_page_va);
-					newpt->table[pte] = new_pt_entry;
+					// //Update the new page table accordingly:
+					// int new_pt_entry = PAGEVA_TO_PTE(new_page_va);
+					// newpt->table[pte] = new_pt_entry;
+
+					
 					//TODO permissions
 				}
 				else //No page at Page Table entry 'pte'
@@ -133,7 +137,8 @@ as_destroy(struct addrspace *as)
 				if(pt_entry != 0x0)
 				{
 					struct page *page = get_page(pt_entry);
-					free_kpages(page->va);
+					vaddr_t page_location = PADDR_TO_KVADDR(page->pa);
+					free_kpages(page_location);
 				}
 			}
 			//Now, delete the page table. //TODO create a destory method??
@@ -201,19 +206,22 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	vaddr_t cur_vaddr = vaddr;
 	for(size_t i = 0; i < pages_required; i++)
 	{
-		//Allocate a page. //TODO implement on-demand paging.
-		vaddr_t page_va = page_alloc(as);
+		struct page *page = page_alloc(as,cur_vaddr);
+		(void) page;
+		// vaddr_t page_va = PADDR_TO_KVADDR(page->pa);
+		// //Allocate a page. //TODO implement on-demand paging.
+		// vaddr_t page_va = page_alloc(as,cur_vaddr);
 		
-		//Get the page table for the virtual address.
-		struct page_table *pt = pgdir_walk(as,cur_vaddr,true);
-		KASSERT(pt != NULL);
-		KASSERT(pt != 0x0);
+		// //Get the page table for the virtual address.
+		// struct page_table *pt = pgdir_walk(as,cur_vaddr,true);
+		// KASSERT(pt != NULL);
+		// KASSERT(pt != 0x0);
 
-		//Update the page table entry to point to the page we made.
-		size_t pt_index = VA_TO_PT_INDEX(cur_vaddr);
-		pt->table[pt_index] = PAGEVA_TO_PTE(page_va);
-		DEBUG(DB_VM,"Page VA:%p\n", (void*) cur_vaddr);
-		DEBUG(DB_VM,"Page PA:%p\n", (void*) KVADDR_TO_PADDR(page_va));
+		// //Update the page table entry to point to the page we made.
+		// size_t pt_index = VA_TO_PT_INDEX(cur_vaddr);
+		// pt->table[pt_index] = PAGEVA_TO_PTE(page_va);
+		// DEBUG(DB_VM,"Page VA:%p\n", (void*) cur_vaddr);
+		// DEBUG(DB_VM,"Page PA:%p\n", (void*) KVADDR_TO_PADDR(page_va));
 		// kprintf("Page VA: %p\n",(void*) page_va);
 		// kprintf("Page PA: %p\n",(void*) KVADDR_TO_PADDR(page_va));
 		// kprintf("PTE: %d\n", PAGEVA_TO_PTE(page_va));
@@ -227,10 +235,10 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	//Also define the end of heap
 	as->heap_end = as->heap_start;
 
-	DEBUG(DB_VM,"Region VA: %p\n",(void*) vaddr);
-	DEBUG(DB_VM,"Region SZ: %d\n", sz);
-	DEBUG(DB_VM,"Page Count: %d\n",pages_required);
-	DEBUG(DB_VM,"RWX: %d%d%d\n", readable,writeable,executable);
+	// DEBUG(DB_VM,"Region VA: %p\n",(void*) vaddr);
+	// DEBUG(DB_VM,"Region SZ: %d\n", sz);
+	// DEBUG(DB_VM,"Page Count: %d\n",pages_required);
+	// DEBUG(DB_VM,"RWX: %d%d%d\n", readable,writeable,executable);
 	// kprintf("Region VA:%p\n", (void*) vaddr);
 	// kprintf("Region SZ:%d\n",sz);
 	// kprintf("RWX:%d%d%d\n",readable,writeable,executable);
@@ -273,19 +281,22 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 
 	(void)as;
 	as->stack = (vaddr_t) USERSTACK - PAGE_SIZE;
+	struct page *page = page_alloc(as,as->stack);
+	vaddr_t stack_page_va = page->va;
+	(void) stack_page_va;
 	//Allocate a page for the stack.
-	vaddr_t stack_page_va = page_alloc(as);
+	// vaddr_t stack_page_va = page_alloc(as);
 	// kprintf("Allocating page for stack...\n");
 	//Get the page table for the virtual address.
-	struct page_table *pt = pgdir_walk(as,as->stack,true);
-	KASSERT(pt != NULL);
-	KASSERT(pt != 0x0);
+	// struct page_table *pt = pgdir_walk(as,as->stack,true);
+	// KASSERT(pt != NULL);
+	// KASSERT(pt != 0x0);
 
-	//Update the page table entry to point to the page we made.
-	size_t pt_index = VA_TO_PT_INDEX(as->stack);
-	pt->table[pt_index] = PAGEVA_TO_PTE(stack_page_va);
-	DEBUG(DB_VM, "Heap End: %p\n", (void*) as->heap_end);
-	DEBUG(DB_VM,"Stack:%p\n",(void*) as->stack);
+	// //Update the page table entry to point to the page we made.
+	// size_t pt_index = VA_TO_PT_INDEX(as->stack);
+	// pt->table[pt_index] = PAGEVA_TO_PTE(stack_page_va);
+	// DEBUG(DB_VM, "Heap End: %p\n", (void*) as->heap_end);
+	// DEBUG(DB_VM,"Stack:%p\n",(void*) as->stack);
 	// kprintf("VA: %p\n",(void*) stackptr);
 	// kprintf("Page PA: %p\n",(void*) KVADDR_TO_PADDR(stack_page_va));
 	// kprintf("PTE: %d\n", PAGEVA_TO_PTE(stack_page_va));
