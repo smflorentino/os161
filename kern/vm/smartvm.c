@@ -120,7 +120,10 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	{
 		return EFAULT;
 	}
-
+	if(as->loadelf_done && faultaddress < USER_STACK_LIMIT && faultaddress > as->heap_end)
+	{
+		return EFAULT;
+	}
 	(void)faulttype;
 	
 	//Translate....

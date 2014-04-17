@@ -50,6 +50,7 @@ as_create(void)
 	if (as == NULL) {
 		return NULL;
 	}
+	as->loadelf_done = false;
 
 	/*
 	 * Initialize as needed.
