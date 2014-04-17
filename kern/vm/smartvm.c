@@ -191,7 +191,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	{
 		tlb_offering = 0;
 	}
-	// splx(spl);
+	splx(spl);
 	return 0;
 }
 
