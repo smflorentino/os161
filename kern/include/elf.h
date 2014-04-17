@@ -192,6 +192,10 @@ typedef struct {
 #define	PF_W		0x2	/* Segment is writable */
 #define	PF_X		0x1	/* Segment is executable */
 
+/*Useful VM flags */
+#define PF_RWX (PF_R | PF_W | PF_X) /* Segment is RWX*/
+#define PF_RW (PF_R | PF_W)
+
 
 typedef Elf32_Ehdr Elf_Ehdr;
 typedef Elf32_Phdr Elf_Phdr;
