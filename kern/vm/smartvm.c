@@ -20,6 +20,10 @@
 /*
  * Wrap rma_stealmem in a spinlock.
  */
+/* Maximum of 1MB of user stack */
+#define VM_STACKPAGES	256
+#define USER_STACK_LIMIT (0x80000000 - (VM_STACKPAGES * PAGE_SIZE))
+
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
 static bool vm_initialized = false;
@@ -110,48 +114,49 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	struct addrspace *as = curthread->t_addrspace;
 	// DEBUG(DB_VM, "VA:%p\n", (void*) faultaddress);
 	// DEBUG(DB_VM, "St:%p\n", (void*) as->stack);
+	
 	//Make sure address is valid
 	if(faultaddress >= 0x80000000)
 	{
 		return EFAULT;
 	}
-	//TODO fix this
-	// if(faultaddress > as->heap_end && faultaddress < as->stack - (PAGE_SIZE))
-	// {
-	// 	return EFAULT;
-	// }
-	(void)faulttype;
 
-	//If we're coming down the stack....
-	if(faultaddress < as->stack && faultaddress > as->heap_end)
-	{
-		as->stack -= PAGE_SIZE;
-		page_alloc(as,as->stack);
-		// struct page_table *pt = pgdir_walk(as,as->stack,true);
-		// vaddr_t stack_page_va = page_alloc(as);
-		// //Update the page table entry to point to the page we made.
-		// size_t pt_index = VA_TO_PT_INDEX(as->stack);
-		// pt->table[pt_index] = PAGEVA_TO_PTE(stack_page_va);
-	}
+	(void)faulttype;
 	
 	//Translate....
 	struct page_table *pt = pgdir_walk(as,faultaddress,false);
 	int pt_index = VA_TO_PT_INDEX(faultaddress);
 	int pfn = PTE_TO_PFN(pt->table[pt_index]);
 
-	//If PFN is 0, and we're inside the heap, could be that page
-	//was not allocated yet. Try to allocate it now.
-	// if(pfn == 0 && faultaddress < as->stack && faultaddress >= as->heap_start)
-	// {
-	// 	page_alloc(as,faultaddress);
-	// }
-	
-	// if(pfn == 0)
-	// {
-	// 	//Invalid address
-	// 	return EFAULT;
-	// }
-	KASSERT(pfn >= 0);
+	/*If the PFN is 0, we might need to dynamically allocate
+	on the stack or the heap */
+	if(pfn == 0)
+	{
+
+		//Stack
+		if(faultaddress < as->stack && faultaddress > USER_STACK_LIMIT)
+		{
+			as->stack -= PAGE_SIZE;
+			page_alloc(as,as->stack);
+		}
+		//Heap
+		else if(faultaddress < as->heap_end && faultaddress > as->heap_start)
+		{
+			page_alloc(as,faultaddress);
+		}
+		else
+		{
+			return EFAULT;
+		}
+	}
+
+	//Try translating again.Translate....
+	pt = pgdir_walk(as,faultaddress,false);
+	pt_index = VA_TO_PT_INDEX(faultaddress);
+	pfn = PTE_TO_PFN(pt->table[pt_index]);
+
+	//This time, it shouldn't be 0.
+	KASSERT(pfn > 0);
 
 	uint32_t ehi,elo;
 

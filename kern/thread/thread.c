@@ -493,7 +493,6 @@ thread_fork(const char *name,
 
 	/* Allocate a stack */
 	newthread->t_stack = kmalloc(STACK_SIZE);
-	DEBUG(DB_VM, "TSA:%p\n", newthread->t_stack);
 
 	// kprintf("TSA|%p|\n",newthread->	t_stack);
 	if (newthread->t_stack == NULL) {
