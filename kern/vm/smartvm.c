@@ -30,6 +30,8 @@ static bool vm_initialized = false;
 
 static struct page *core_map;
 static size_t page_count;
+/* Round-Robin TLB entry to sacrifice >:) */
+static char tlb_offering = 0;
 /* TODO figure out how to do this. I'll probably kmalloc it in
 vm_bootstrap after we set the correct flag.*/ 
 static struct lock *core_map_lock = NULL;
@@ -180,12 +182,16 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		splx(spl);
 		return 0;
 	}
-
-	kprintf("dumbvm: Ran out of TLB entries - cannot handle page fault\n");
-	splx(spl);
-	return EFAULT;
-
-
+	/*If we get here, TLB was full. Kill an entry, round robin style*/
+	ehi = faultaddress;
+	elo = pfn | TLBLO_DIRTY | TLBLO_VALID;
+	tlb_write(ehi,elo,tlb_offering);
+	tlb_offering++;
+	if(tlb_offering == NUM_TLB)
+	{
+		tlb_offering = 0;
+	}
+	// splx(spl);
 	return 0;
 }
 
