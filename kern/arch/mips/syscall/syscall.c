@@ -422,6 +422,17 @@ sys_sbrk(intptr_t amount, uint32_t *retval_sbrk)
 {
 	DEBUG(DB_VM, "Amount to sbrk: %d\n", (int)amount);
 	//retval = NULL;
+	
+	// Check if amount is extraordinarily positive.
+	if(amount > HEAP_MAX){
+		return ENOMEM;
+	}
+
+	// Check if amount is extraordinarily negative.
+	if((amount*-1) > HEAP_MAX){
+		return EINVAL;
+	}
+
 	// Check that amount it page-aligned.
 	if(amount%4) {
 		// Round up to increments of 4 bytes.
