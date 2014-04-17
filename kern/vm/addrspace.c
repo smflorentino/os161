@@ -34,6 +34,7 @@
 #include <vm.h>
 #include <mips/tlb.h>
 #include <spl.h>
+#include <elf.h>
 
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
@@ -50,6 +51,7 @@ as_create(void)
 	if (as == NULL) {
 		return NULL;
 	}
+	as->loadelf_done = false;
 
 	/*
 	 * Initialize as needed.
@@ -87,10 +89,12 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 				//Page Table Entry exists
 				if(pt_entry != 0x0)
 				{
+					//Get page permissions
+					int permissions = PTE_TO_PERMISSIONS(pt_entry);
 					//Locate the old page
 					struct page *oldpage = get_page(pt_entry);
 					//Allocate a new page
-					struct page *newpage = page_alloc(newas,oldpage->va);
+					struct page *newpage = page_alloc(newas,oldpage->va,permissions);
 					vaddr_t new_page_va = PADDR_TO_KVADDR(newpage->pa);
 					vaddr_t old_page_va = PADDR_TO_KVADDR(oldpage->pa);
 					//Copy the data:
@@ -206,7 +210,8 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	vaddr_t cur_vaddr = vaddr;
 	for(size_t i = 0; i < pages_required; i++)
 	{
-		struct page *page = page_alloc(as,cur_vaddr);
+		int permissions = readable | writeable | executable;
+		struct page *page = page_alloc(as,cur_vaddr,permissions);
 		(void) page;
 		// vaddr_t page_va = PADDR_TO_KVADDR(page->pa);
 		// //Allocate a page. //TODO implement on-demand paging.
@@ -238,7 +243,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	// DEBUG(DB_VM,"Region VA: %p\n",(void*) vaddr);
 	// DEBUG(DB_VM,"Region SZ: %d\n", sz);
 	// DEBUG(DB_VM,"Page Count: %d\n",pages_required);
-	// DEBUG(DB_VM,"RWX: %d%d%d\n", readable,writeable,executable);
+	DEBUG(DB_VM,"RWX: %d%d%d\n", readable,writeable,executable);
 	// kprintf("Region VA:%p\n", (void*) vaddr);
 	// kprintf("Region SZ:%d\n",sz);
 	// kprintf("RWX:%d%d%d\n",readable,writeable,executable);
@@ -281,7 +286,8 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 
 	(void)as;
 	as->stack = (vaddr_t) USERSTACK - PAGE_SIZE;
-	struct page *page = page_alloc(as,as->stack);
+	int permissions = PF_RWX; //change?
+	struct page *page = page_alloc(as,as->stack,permissions);
 	vaddr_t stack_page_va = page->va;
 	(void) stack_page_va;
 	//Allocate a page for the stack.

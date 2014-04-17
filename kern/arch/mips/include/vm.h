@@ -83,6 +83,10 @@
  //So TLBLO_PPAGE = 0xFFFFF000
 #define PTE_TO_PFN(pte) ( (pte & 0xFFFFF000) )
 
+/* Get the permissions on a page table entry (PTE).
+   Max permissions are RWX, or 111 (hence 0x7) */
+#define PTE_TO_PERMISSIONS(pte) (pte & 0x00000007)
+
 /*
  * The top of user space. (Actually, the address immediately above the
  * last valid user address.)

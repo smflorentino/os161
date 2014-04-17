@@ -17,12 +17,13 @@
 #include <mips/tlb.h>
 #include <current.h>
 #include <spl.h>
+#include <elf.h>
 /*
  * Wrap rma_stealmem in a spinlock.
  */
 /* Maximum of 1MB of user stack */
 #define VM_STACKPAGES	256
-#define USER_STACK_LIMIT (0x80000000 - (VM_STACKPAGES * PAGE_SIZE))
+#define USER_STACK_LIMIT (0x80000000 - (VM_STACKPAGES * PAGE_SIZE)) 
 
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
@@ -30,6 +31,8 @@ static bool vm_initialized = false;
 
 static struct page *core_map;
 static size_t page_count;
+/* Round-Robin TLB entry to sacrifice >:) */
+static char tlb_offering = 0;
 /* TODO figure out how to do this. I'll probably kmalloc it in
 vm_bootstrap after we set the correct flag.*/ 
 static struct lock *core_map_lock = NULL;
@@ -106,12 +109,18 @@ void vm_bootstrap()
 //TODO permissions.
 int vm_fault(int faulttype, vaddr_t faultaddress) 
 {
+	struct addrspace *as = curthread->t_addrspace;
+	//We ALWAYS update TLB with writable bits ASAP. So this means a fault.
+	//TODO uncomment this when as_prepare_load & as_complete_load are done.
+	// if(faulttype == VM_FAULT_READONLY && as->loadelf_done)
+	// {
+	// 	return EFAULT;
+	// }
 	if(faultaddress == 0x0)
 	{
 		return EFAULT;
 	}
 	faultaddress &= PAGE_FRAME;
-	struct addrspace *as = curthread->t_addrspace;
 	// DEBUG(DB_VM, "VA:%p\n", (void*) faultaddress);
 	// DEBUG(DB_VM, "St:%p\n", (void*) as->stack);
 	
@@ -120,14 +129,17 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	{
 		return EFAULT;
 	}
-
+	if(as->loadelf_done && faultaddress < USER_STACK_LIMIT && faultaddress > as->heap_end)
+	{
+		return EFAULT;
+	}
 	(void)faulttype;
 	
 	//Translate....
 	struct page_table *pt = pgdir_walk(as,faultaddress,false);
 	int pt_index = VA_TO_PT_INDEX(faultaddress);
 	int pfn = PTE_TO_PFN(pt->table[pt_index]);
-
+	int permissions = PTE_TO_PERMISSIONS(pt->table[pt_index]);
 	/*If the PFN is 0, we might need to dynamically allocate
 	on the stack or the heap */
 	if(pfn == 0)
@@ -137,12 +149,12 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		if(faultaddress < as->stack && faultaddress > USER_STACK_LIMIT)
 		{
 			as->stack -= PAGE_SIZE;
-			page_alloc(as,as->stack);
+			page_alloc(as,as->stack, PF_RW);
 		}
 		//Heap
 		else if(faultaddress < as->heap_end && faultaddress > as->heap_start)
 		{
-			page_alloc(as,faultaddress);
+			page_alloc(as,faultaddress, PF_RW);
 		}
 		else
 		{
@@ -154,7 +166,8 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	pt = pgdir_walk(as,faultaddress,false);
 	pt_index = VA_TO_PT_INDEX(faultaddress);
 	pfn = PTE_TO_PFN(pt->table[pt_index]);
-
+	permissions = PTE_TO_PERMISSIONS(pt->table[pt_index]);
+	bool writable = permissions & PF_W;
 	//This time, it shouldn't be 0.
 	KASSERT(pfn > 0);
 
@@ -171,18 +184,30 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		}
 		ehi = faultaddress;
 		elo = pfn | TLBLO_DIRTY | TLBLO_VALID;
+		if(writable)
+		{
+			elo |= TLBLO_DIRTY;
+		}
 		// kprintf("Writing TLB Index %d\n",i); 
 		// DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, pfn);
 		tlb_write(ehi, elo, i);
 		splx(spl);
 		return 0;
 	}
-
-	kprintf("dumbvm: Ran out of TLB entries - cannot handle page fault\n");
+	/*If we get here, TLB was full. Kill an entry, round robin style*/
+	ehi = faultaddress;
+	elo = pfn | TLBLO_DIRTY | TLBLO_VALID;
+	if(writable)
+	{
+		elo |= TLBLO_DIRTY;
+	}
+	tlb_write(ehi,elo,tlb_offering);
+	tlb_offering++;
+	if(tlb_offering == NUM_TLB)
+	{
+		tlb_offering = 0;
+	}
 	splx(spl);
-	return EFAULT;
-
-
 	return 0;
 }
 
@@ -278,7 +303,7 @@ allocate_fixed_page(size_t page_num)
 
 static
 void
-allocate_nonfixed_page(size_t page_num, struct addrspace *as, vaddr_t va)
+allocate_nonfixed_page(size_t page_num, struct addrspace *as, vaddr_t va, int permissions)
 {
 	//Allocate a page
 	core_map[page_num].state = DIRTY;
@@ -296,7 +321,10 @@ allocate_nonfixed_page(size_t page_num, struct addrspace *as, vaddr_t va)
 	//Update the page table entry to point to the page we made.
 	size_t pt_index = VA_TO_PT_INDEX(va);
 	vaddr_t page_location = PADDR_TO_KVADDR(core_map[page_num].pa);
-	pt->table[pt_index] = PAGEVA_TO_PTE(page_location	);
+	pt->table[pt_index] = PAGEVA_TO_PTE(page_location);
+	//Add in permissions
+	(void)permissions;
+	// pt->table[pt_index] |= permissions;
 
 	zero_page(page_num);
 }
@@ -318,7 +346,7 @@ free_fixed_page(size_t page_num)
 }
 
 struct page *
-page_alloc(struct addrspace* as, vaddr_t va)
+page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 {
 	bool holdlock = spinlock_do_i_hold(&stealmem_lock);
 	if(!holdlock)
@@ -337,7 +365,7 @@ page_alloc(struct addrspace* as, vaddr_t va)
 			else
 			{
 				KASSERT(va != 0x0);
-				allocate_nonfixed_page(i,as,va);
+				allocate_nonfixed_page(i,as,va,permissions);
 			}
 			core_map[i].npages = 1;
 			if(!holdlock)
@@ -408,7 +436,7 @@ vaddr_t alloc_kpages(int npages)
 		return PADDR_TO_KVADDR(pa);
 	}
 	if(npages == 1) {
-		struct page *kern_page = page_alloc(0x0,0x0);
+		struct page *kern_page = page_alloc(0x0,0x0,0);
 		return PADDR_TO_KVADDR(kern_page->pa);
 	}
 	else if(npages > 1) {

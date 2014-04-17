@@ -105,6 +105,9 @@ struct addrspace {
 
         // /* User Stack */
         vaddr_t stack;
+
+        /* Loaded */
+        bool loadelf_done;
 #endif
 };
 
