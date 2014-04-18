@@ -82,7 +82,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 			struct page_table *newpt = kmalloc(sizeof (struct page_table));
 			newas->page_dir[i] = newpt;
 			//Now iterate through each entry in the page table.
-			//If a page exists, copy it; and update hte new table.
+			//If a page exists, copy it; and update the new table.
 			for(size_t pte = 0; pte< PAGE_TABLE_ENTRIES;pte++)
 			{
 				int pt_entry = oldpt->table[pte];
@@ -215,7 +215,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	vaddr_t seg_end = vaddr + pages_required * PAGE_SIZE;
 	if(seg_end > as->heap_start)
 	{
-		as->heap_start = seg_end;
+		as->heap_start = seg_end + PAGE_SIZE;
 		as->heap_end = as->heap_start;
 	}
 
@@ -236,9 +236,9 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	}
 
 	//Heap Moves up as we define each region
-	as->heap_start += sz;
+	// as->heap_start += sz;
 	//Also define the end of heap
-	as->heap_end = as->heap_start;
+	// as->heap_end = as->heap_start;
 
 	// DEBUG(DB_VM,"Region VA: %p\n",(void*) vaddr);
 	// DEBUG(DB_VM,"Region SZ: %d\n", sz);
