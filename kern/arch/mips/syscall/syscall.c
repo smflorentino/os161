@@ -421,6 +421,15 @@ int
 sys_sbrk(intptr_t amount, uint32_t *retval_sbrk)
 {
 	DEBUG(DB_VM, "Amount to sbrk: %d\n", (int)amount);
+
+	if(amount >= 0x40000000)
+	{
+		return ENOMEM;
+	}
+	if(amount < 0 && -1*amount >= 0x40000000)
+	{
+		return EINVAL;
+	}
 	//retval = NULL;
 	// Check that amount it page-aligned.
 	if(amount%4) {

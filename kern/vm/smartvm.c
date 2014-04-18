@@ -33,6 +33,8 @@ static struct page *core_map;
 static size_t page_count;
 /* Round-Robin TLB entry to sacrifice >:) */
 static char tlb_offering = 0;
+/* Number of free pages in memory  */
+static size_t free_pages;
 /* TODO figure out how to do this. I'll probably kmalloc it in
 vm_bootstrap after we set the correct flag.*/ 
 static struct lock *core_map_lock = NULL;
@@ -97,6 +99,7 @@ void vm_bootstrap()
 		core_map[i].state = FREE;
 		core_map[i].as = 0x0;
 		core_map[i].va = 0x0;
+		free_pages++;
 	}
 	/* Set VM initialization flag. alloc_kpages and free_kpages
 	should behave accordingly now*/
@@ -109,26 +112,29 @@ void vm_bootstrap()
 //TODO permissions.
 int vm_fault(int faulttype, vaddr_t faultaddress) 
 {
+	// DEBUG(DB_VM,"F:%d\n",free_pages);
 	struct addrspace *as = curthread->t_addrspace;
 	//We ALWAYS update TLB with writable bits ASAP. So this means a fault.
-	//TODO uncomment this when as_prepare_load & as_complete_load are done.
-	// if(faulttype == VM_FAULT_READONLY && as->loadelf_done)
-	// {
-	// 	return EFAULT;
-	// }
+	if(faulttype == VM_FAULT_READONLY && as->use_permissions)
+	{
+		// DEBUG(DB_VM, "NOT ALLOWED\n");
+		return EFAULT;
+	}
+	//Null Pointer
 	if(faultaddress == 0x0)
 	{
 		return EFAULT;
 	}
+	//Align the fault address to a page (4k) boundary.
 	faultaddress &= PAGE_FRAME;
-	// DEBUG(DB_VM, "VA:%p\n", (void*) faultaddress);
-	// DEBUG(DB_VM, "St:%p\n", (void*) as->stack);
 	
 	//Make sure address is valid
 	if(faultaddress >= 0x80000000)
 	{
 		return EFAULT;
 	}
+	/*If we're trying to access a region after the end of the heap but 
+	 * before the stack, that's invalid (unless load_elf is running) */
 	if(as->loadelf_done && faultaddress < USER_STACK_LIMIT && faultaddress > as->heap_end)
 	{
 		return EFAULT;
@@ -162,12 +168,15 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		}
 	}
 
-	//Try translating again.Translate....
+	//Try translating again...
 	pt = pgdir_walk(as,faultaddress,false);
 	pt_index = VA_TO_PT_INDEX(faultaddress);
 	pfn = PTE_TO_PFN(pt->table[pt_index]);
+	// DEBUG(DB_VM,"PTE:%p\n",(void*) pt->table[pt_index]);
 	permissions = PTE_TO_PERMISSIONS(pt->table[pt_index]);
-	bool writable = permissions & PF_W;
+	// DEBUG(DB_VM, "PTERWX:%d\n",permissions);
+	//Page is writable if permissions say so or if we're ignoring permissions.
+	bool writable = (permissions & PF_W) || !(as->use_permissions);
 	//This time, it shouldn't be 0.
 	KASSERT(pfn > 0);
 
@@ -183,7 +192,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 			continue;
 		}
 		ehi = faultaddress;
-		elo = pfn | TLBLO_DIRTY | TLBLO_VALID;
+		elo = pfn | TLBLO_VALID;
 		if(writable)
 		{
 			elo |= TLBLO_DIRTY;
@@ -196,7 +205,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	}
 	/*If we get here, TLB was full. Kill an entry, round robin style*/
 	ehi = faultaddress;
-	elo = pfn | TLBLO_DIRTY | TLBLO_VALID;
+	elo = pfn | TLBLO_VALID;
 	if(writable)
 	{
 		elo |= TLBLO_DIRTY;
@@ -205,6 +214,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	tlb_offering++;
 	if(tlb_offering == NUM_TLB)
 	{
+		//At the end of the TLB. Start back at 0 again.
 		tlb_offering = 0;
 	}
 	splx(spl);
@@ -299,6 +309,8 @@ allocate_fixed_page(size_t page_num)
 	core_map[page_num].va = 0x0;
 	core_map[page_num].as = NULL;
 	zero_page(page_num);
+	free_pages--;
+	DEBUG(DB_VM, "AF:%d\n",free_pages);
 }
 
 static
@@ -324,9 +336,11 @@ allocate_nonfixed_page(size_t page_num, struct addrspace *as, vaddr_t va, int pe
 	pt->table[pt_index] = PAGEVA_TO_PTE(page_location);
 	//Add in permissions
 	(void)permissions;
-	// pt->table[pt_index] |= permissions;
+	pt->table[pt_index] |= permissions;
 
 	zero_page(page_num);
+	free_pages--;
+	DEBUG(DB_VM, "A:%d\n",free_pages);
 }
 
 /* Called by free_kpages */
@@ -335,10 +349,12 @@ void
 free_fixed_page(size_t page_num)
 {
 	// KASSERT(lock_do_i_hold(core_map_lock));
+	free_pages++;
 	core_map[page_num].state = FREE;
 	core_map[page_num].va = 0x0;
 	core_map[page_num].as =  NULL;
 	core_map[page_num].npages = 0;
+	DEBUG(DB_VM, "FR:%d\n",free_pages);
 	// if(core_map[page_num].as != NULL)
 	// {
 	// 	panic("I don't know how to free page with an address space");
@@ -449,13 +465,12 @@ vaddr_t alloc_kpages(int npages)
 	return t;
 }
 
-/* Free kernel heap pages (called by kfree) */
-/* Only works for pages that are in a contiguous block */
+/* Free a page */
 void free_kpages(vaddr_t addr)
 {
 	if(addr < 0x80000000)
 	{
-		panic("I only support KVAs right now");	
+		panic("Tried to free a direct-mapped address");	
 	}
 	spinlock_acquire(&stealmem_lock);
 	// kprintf("Freeing VA:%p\n", (void*) addr);
