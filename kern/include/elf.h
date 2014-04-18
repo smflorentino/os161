@@ -145,7 +145,7 @@ typedef struct {
 #define	EM_SH		42	/* Hitachi Super-H */
 #define	EM_SPARCV9	43	/* SPARC Version 9 */
 #define	EM_TRICORE	44	/* Siemens Tricore */
-#define	EM_ARC		45	/* Argonaut RISC Core */
+#define	EM_ARC		445	/* Argonaut RISC Core */
 #define	EM_H8_300	46	/* Hitachi H8/300 */
 #define	EM_H8_300H	47	/* Hitachi H8/300H */
 #define	EM_H8S		48	/* Hitachi H8S */

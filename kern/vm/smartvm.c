@@ -112,7 +112,7 @@ void vm_bootstrap()
 //TODO permissions.
 int vm_fault(int faulttype, vaddr_t faultaddress) 
 {
-	// DEBUG(DB_VM,"F:%d\n",free_pages);
+	// DEBUG(DB_VM,"F:%p\n",(void*) faultaddress);
 	struct addrspace *as = curthread->t_addrspace;
 	//We ALWAYS update TLB with writable bits ASAP. So this means a fault.
 	if(faulttype == VM_FAULT_READONLY && as->use_permissions)
@@ -158,7 +158,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 			page_alloc(as,as->stack, PF_RW);
 		}
 		//Heap
-		else if(faultaddress < as->heap_end && faultaddress > as->heap_start)
+		else if(faultaddress < as->heap_end && faultaddress >= as->heap_start)
 		{
 			page_alloc(as,faultaddress, PF_RW);
 		}
@@ -179,6 +179,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	bool writable = (permissions & PF_W) || !(as->use_permissions);
 	//This time, it shouldn't be 0.
 	KASSERT(pfn > 0);
+	KASSERT(pfn <= PAGE_SIZE * (int) page_count);
 
 	uint32_t ehi,elo;
 
@@ -234,6 +235,10 @@ pgdir_walk(struct addrspace *as, vaddr_t va, bool create)
 	{
 		//Store the location of the page table in the page directory;
 		pt = kmalloc(sizeof(struct page_table));
+		for(size_t i =0;i<1024;i++)
+		{
+			pt->table[i] = 0;
+		}
 		as->page_dir[pd_index] = pt;
 	}
 	return pt;
@@ -310,7 +315,7 @@ allocate_fixed_page(size_t page_num)
 	core_map[page_num].as = NULL;
 	zero_page(page_num);
 	free_pages--;
-	DEBUG(DB_VM, "AF:%d\n",free_pages);
+	// DEBUG(DB_VM, "AF:%d\n",free_pages);
 }
 
 static
@@ -334,13 +339,16 @@ allocate_nonfixed_page(size_t page_num, struct addrspace *as, vaddr_t va, int pe
 	size_t pt_index = VA_TO_PT_INDEX(va);
 	vaddr_t page_location = PADDR_TO_KVADDR(core_map[page_num].pa);
 	pt->table[pt_index] = PAGEVA_TO_PTE(page_location);
+	// DEBUG(DB_VM, "VA:%p\n", (void*) va);
+	// DEBUG(DB_VM, "PTE:%p\n", (void*) pt->table[pt_index]);
+	// DEBUG(DB_VM, "PFN:%p\n", (void*) PTE_TO_PFN(pt->table[pt_index]));
 	//Add in permissions
 	(void)permissions;
 	pt->table[pt_index] |= permissions;
 
 	zero_page(page_num);
 	free_pages--;
-	DEBUG(DB_VM, "A:%d\n",free_pages);
+	// DEBUG(DB_VM, "A:%d\n",free_pages);
 }
 
 /* Called by free_kpages */
@@ -354,7 +362,7 @@ free_fixed_page(size_t page_num)
 	core_map[page_num].va = 0x0;
 	core_map[page_num].as =  NULL;
 	core_map[page_num].npages = 0;
-	DEBUG(DB_VM, "FR:%d\n",free_pages);
+	// DEBUG(DB_VM, "FR:%d\n",free_pages);
 	// if(core_map[page_num].as != NULL)
 	// {
 	// 	panic("I don't know how to free page with an address space");

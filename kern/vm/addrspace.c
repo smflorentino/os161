@@ -51,6 +51,7 @@ as_create(void)
 	if (as == NULL) {
 		return NULL;
 	}
+
 	//Use permissions (for now...)
 	as->use_permissions = true;
 	//load_elf will just be starting when we call as_create...
@@ -180,6 +181,8 @@ int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		 int readable, int writeable, int executable)
 {
+	DEBUG(DB_VM, "Seg Start: %p\n", (void*) vaddr);
+	DEBUG(DB_VM, "Size: %p\n", (void*) sz);
 	//Calculate the number of pages that we need
 	size_t pages_required = sz / PAGE_SIZE;
 	if(sz < PAGE_SIZE)
@@ -190,6 +193,24 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	{
 		pages_required++;
 	}
+	/*If we split between two pages, add another page:
+	 * For example, if vaddr = 0x444970, and size = 192,
+	 * we need from 0x444970 to 0x445162. So we need
+	 * 0x44000 AND 0x445000 -- TWO PAGES. Simply aligning 
+	 * to a page boundary will get is 0x44000, but not the 
+	 * 162 bytes that spill into the next page. So we need to
+	 * account for that now:
+	 */
+	// if(((vaddr & SUB_FRAME) + sz > PAGE_SIZE))
+	// {
+	// 	// DEBUG(DB_VM, "Addr: %p Size: %d\n", (void*) vaddr,sz);
+	// 	// DEBUG(DB_VM, "Offest: %p\n", (void*) (vaddr & SUB_FRAME));
+	// 	pages_required++;
+	// }
+	DEBUG(DB_VM,"Pages Required:%d\n", pages_required);
+	DEBUG(DB_VM,"Seg End:%p\n", (void*) ( vaddr + (pages_required * PAGE_SIZE)));
+	DEBUG(DB_VM,"Seg End:%p\n", (void*) (vaddr + sz));
+
 	//Adjust the start of the heap to be *PAST* the end of this segment.
 	vaddr_t seg_end = vaddr + pages_required * PAGE_SIZE;
 	if(seg_end > as->heap_start)
@@ -198,10 +219,15 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		as->heap_end = as->heap_start;
 	}
 
+	//Align the vaddr on a page boundary.
+	DEBUG(DB_VM, "addr: %p size: %d\n", (void*) vaddr,sz);
+	vaddr &= PAGE_FRAME;
+	DEBUG(DB_VM, "addr: %p size: %d\n",(void*) vaddr,sz);
 	//Allocate the segment, one page at a time. Pages need not be contiguous.
 	vaddr_t cur_vaddr = vaddr;
 	for(size_t i = 0; i < pages_required; i++)
 	{
+		DEBUG(DB_VM, "CURVA:%p\n", (void*) cur_vaddr);
 		int permissions = readable | writeable | executable;
 		struct page *page = page_alloc(as,cur_vaddr,permissions);
 		(void) page;
@@ -217,7 +243,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	// DEBUG(DB_VM,"Region VA: %p\n",(void*) vaddr);
 	// DEBUG(DB_VM,"Region SZ: %d\n", sz);
 	// DEBUG(DB_VM,"Page Count: %d\n",pages_required);
-	DEBUG(DB_VM,"RWX: %d%d%d\n", readable,writeable,executable);
+	// DEBUG(DB_VM,"RWX: %d%d%d\n", readable,writeable,executable);
 
 	return 0;
 }
@@ -259,7 +285,7 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	struct page *page = page_alloc(as,as->stack,permissions);
 	vaddr_t stack_page_va = page->va;
 	(void) stack_page_va;
-
+	DEBUG(DB_VM,"Heap Start before aligning: %p\n", (void*) as->heap_end);
 	//Align the heap on a page boundary:
 	int offset = as->heap_start % PAGE_SIZE;
 	if(offset != 0)
