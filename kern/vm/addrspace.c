@@ -51,11 +51,11 @@ as_create(void)
 	if (as == NULL) {
 		return NULL;
 	}
-	as->loadelf_done = false;
 
-	/*
-	 * Initialize as needed.
-	 */
+	//Use permissions (for now...)
+	as->use_permissions = true;
+	//load_elf will just be starting when we call as_create...
+	as->loadelf_done = false;
 
 	return as;
 }
@@ -82,7 +82,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 			struct page_table *newpt = kmalloc(sizeof (struct page_table));
 			newas->page_dir[i] = newpt;
 			//Now iterate through each entry in the page table.
-			//If a page exists, copy it; and update hte new table.
+			//If a page exists, copy it; and update the new table.
 			for(size_t pte = 0; pte< PAGE_TABLE_ENTRIES;pte++)
 			{
 				int pt_entry = oldpt->table[pte];
@@ -99,13 +99,6 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 					vaddr_t old_page_va = PADDR_TO_KVADDR(oldpage->pa);
 					//Copy the data:
 					memcpy((void*) new_page_va, (void*) old_page_va,PAGE_SIZE);
-
-					// //Update the new page table accordingly:
-					// int new_pt_entry = PAGEVA_TO_PTE(new_page_va);
-					// newpt->table[pte] = new_pt_entry;
-
-					
-					//TODO permissions
 				}
 				else //No page at Page Table entry 'pte'
 				{
@@ -149,8 +142,6 @@ as_destroy(struct addrspace *as)
 			kfree(pt);
 		}
 	}
-	//Now, delete the page directory.
-	// kfree(as->page_dir);
 	//Now, delete the address space.
 	kfree(as);
 }
@@ -190,6 +181,9 @@ int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		 int readable, int writeable, int executable)
 {
+	DEBUG(DB_VM, "Seg Start: %p\n", (void*) vaddr);
+	DEBUG(DB_VM, "Size: %p\n", (void*) sz);
+	//Calculate the number of pages that we need
 	size_t pages_required = sz / PAGE_SIZE;
 	if(sz < PAGE_SIZE)
 	{
@@ -199,115 +193,99 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	{
 		pages_required++;
 	}
-	//Adjust the start of the heap.
+	/*If we split between two pages, add another page:
+	 * For example, if vaddr = 0x444970, and size = 192,
+	 * we need from 0x444970 to 0x445162. So we need
+	 * 0x44000 AND 0x445000 -- TWO PAGES. Simply aligning 
+	 * to a page boundary will get is 0x44000, but not the 
+	 * 162 bytes that spill into the next page. So we need to
+	 * account for that now:
+	 */
+	// if(((vaddr & SUB_FRAME) + sz > PAGE_SIZE))
+	// {
+	// 	// DEBUG(DB_VM, "Addr: %p Size: %d\n", (void*) vaddr,sz);
+	// 	// DEBUG(DB_VM, "Offest: %p\n", (void*) (vaddr & SUB_FRAME));
+	// 	pages_required++;
+	// }
+	DEBUG(DB_VM,"Pages Required:%d\n", pages_required);
+	DEBUG(DB_VM,"Seg End:%p\n", (void*) ( vaddr + (pages_required * PAGE_SIZE)));
+	DEBUG(DB_VM,"Seg End:%p\n", (void*) (vaddr + sz));
+
+	//Adjust the start of the heap to be *PAST* the end of this segment.
 	vaddr_t seg_end = vaddr + pages_required * PAGE_SIZE;
 	if(seg_end > as->heap_start)
 	{
-		as->heap_start = seg_end;
+		as->heap_start = seg_end + PAGE_SIZE;
 		as->heap_end = as->heap_start;
 	}
 
+	//Align the vaddr on a page boundary.
+	DEBUG(DB_VM, "addr: %p size: %d\n", (void*) vaddr,sz);
+	vaddr &= PAGE_FRAME;
+	DEBUG(DB_VM, "addr: %p size: %d\n",(void*) vaddr,sz);
+	//Allocate the segment, one page at a time. Pages need not be contiguous.
 	vaddr_t cur_vaddr = vaddr;
 	for(size_t i = 0; i < pages_required; i++)
 	{
+		DEBUG(DB_VM, "CURVA:%p\n", (void*) cur_vaddr);
 		int permissions = readable | writeable | executable;
 		struct page *page = page_alloc(as,cur_vaddr,permissions);
 		(void) page;
-		// vaddr_t page_va = PADDR_TO_KVADDR(page->pa);
-		// //Allocate a page. //TODO implement on-demand paging.
-		// vaddr_t page_va = page_alloc(as,cur_vaddr);
-		
-		// //Get the page table for the virtual address.
-		// struct page_table *pt = pgdir_walk(as,cur_vaddr,true);
-		// KASSERT(pt != NULL);
-		// KASSERT(pt != 0x0);
-
-		// //Update the page table entry to point to the page we made.
-		// size_t pt_index = VA_TO_PT_INDEX(cur_vaddr);
-		// pt->table[pt_index] = PAGEVA_TO_PTE(page_va);
-		// DEBUG(DB_VM,"Page VA:%p\n", (void*) cur_vaddr);
-		// DEBUG(DB_VM,"Page PA:%p\n", (void*) KVADDR_TO_PADDR(page_va));
-		// kprintf("Page VA: %p\n",(void*) page_va);
-		// kprintf("Page PA: %p\n",(void*) KVADDR_TO_PADDR(page_va));
-		// kprintf("PTE: %d\n", PAGEVA_TO_PTE(page_va));
-		//TODO permissions too
 
 		cur_vaddr += PAGE_SIZE;
 	}
 
 	//Heap Moves up as we define each region
-	as->heap_start += sz;
+	// as->heap_start += sz;
 	//Also define the end of heap
-	as->heap_end = as->heap_start;
+	// as->heap_end = as->heap_start;
 
 	// DEBUG(DB_VM,"Region VA: %p\n",(void*) vaddr);
 	// DEBUG(DB_VM,"Region SZ: %d\n", sz);
 	// DEBUG(DB_VM,"Page Count: %d\n",pages_required);
-	DEBUG(DB_VM,"RWX: %d%d%d\n", readable,writeable,executable);
-	// kprintf("Region VA:%p\n", (void*) vaddr);
-	// kprintf("Region SZ:%d\n",sz);
-	// kprintf("RWX:%d%d%d\n",readable,writeable,executable);
+	// DEBUG(DB_VM,"RWX: %d%d%d\n", readable,writeable,executable);
 
-	//TODO
-	(void)readable;
-	(void)writeable;
-	(void)executable;
 	return 0;
 }
 
+/* Called from load_elf before segments are loaded. We need to tell
+ * the system to ignore permissions so we can actually load stuff into
+ * read-only segments
+ */
 int
 as_prepare_load(struct addrspace *as)
 {
-	/*
-	 * Write this.
-	 */
-
-	(void)as;
+	as->use_permissions = false;
 	return 0;
 }
 
+/* Called from load_elf after the segments are loaded. We need to tell
+ * the system to use permissions as well as invalidate any TLB entries
+ * that were created when we were ignoring permissions. That way,
+ * the next time we access memory, the TLB will be populated with the 
+ * proper permissions (when use_permissions is disabled, every entry in the TLB is
+ * enabled for writing)
+ */
 int
 as_complete_load(struct addrspace *as)
 {
-	/*
-	 * Write this.
-	 */
-
-	(void)as;
+	//Enable permissions.
+	as->use_permissions = true;
+	DEBUG(DB_VM, "Load complete.\n");
+	//Clear the TLB
+	as_activate(as);
 	return 0;
 }
 
 int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
-	/*
-	 * Write this.
-	 */
-
-	(void)as;
 	as->stack = (vaddr_t) USERSTACK - PAGE_SIZE;
 	int permissions = PF_RWX; //change?
 	struct page *page = page_alloc(as,as->stack,permissions);
 	vaddr_t stack_page_va = page->va;
 	(void) stack_page_va;
-	//Allocate a page for the stack.
-	// vaddr_t stack_page_va = page_alloc(as);
-	// kprintf("Allocating page for stack...\n");
-	//Get the page table for the virtual address.
-	// struct page_table *pt = pgdir_walk(as,as->stack,true);
-	// KASSERT(pt != NULL);
-	// KASSERT(pt != 0x0);
-
-	// //Update the page table entry to point to the page we made.
-	// size_t pt_index = VA_TO_PT_INDEX(as->stack);
-	// pt->table[pt_index] = PAGEVA_TO_PTE(stack_page_va);
-	// DEBUG(DB_VM, "Heap End: %p\n", (void*) as->heap_end);
-	// DEBUG(DB_VM,"Stack:%p\n",(void*) as->stack);
-	// kprintf("VA: %p\n",(void*) stackptr);
-	// kprintf("Page PA: %p\n",(void*) KVADDR_TO_PADDR(stack_page_va));
-	// kprintf("PTE: %d\n", PAGEVA_TO_PTE(stack_page_va));
-	//TODO permissions too
-
+	DEBUG(DB_VM,"Heap Start before aligning: %p\n", (void*) as->heap_end);
 	//Align the heap on a page boundary:
 	int offset = as->heap_start % PAGE_SIZE;
 	if(offset != 0)

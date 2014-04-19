@@ -421,6 +421,15 @@ int
 sys_sbrk(intptr_t amount, uint32_t *retval_sbrk)
 {
 	DEBUG(DB_VM, "Amount to sbrk: %d\n", (int)amount);
+
+	if(amount >= 0x40000000)
+	{
+		return ENOMEM;
+	}
+	if(amount < 0 && -1*amount >= 0x40000000)
+	{
+		return EINVAL;
+	}
 	//retval = NULL;
 	
 	// Check if amount is extraordinarily positive.
@@ -461,9 +470,9 @@ sys_sbrk(intptr_t amount, uint32_t *retval_sbrk)
 	DEBUG(DB_VM, "New heap end: 0x%x\n", new_heap);
 
 	// Return pointer to old heap break point
-	retval_sbrk = (uint32_t*)current_heap;
+	*retval_sbrk = (uint32_t)current_heap;
 	DEBUG(DB_VM, "Old heap end: 0x%x\n", (unsigned int)retval_sbrk);
-
+	as_activate(curthread->t_addrspace);
 	return 0;
 }
 

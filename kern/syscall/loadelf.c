@@ -302,7 +302,7 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 	/* Register load complete in addrspace */
 	struct addrspace *as = curthread->t_addrspace;
 	as->loadelf_done = true;
-	// DEBUG(DB_VM,"LoadELFDone\n");
+	DEBUG(DB_VM,"LoadELFDone\n");
 	// kprintf("LoadELF done\n");
 	return 0;
 }

@@ -99,14 +99,26 @@ struct addrspace {
         /* Just Kidding. Per GWA we can keep page tables in FIXED memory for simplicty's sake.*/
         struct page_table *page_dir[1024];
 
-        // /* Heap Start & End */
+        /* Heap Start & End */
         vaddr_t heap_start;
         vaddr_t heap_end;
 
-        // /* User Stack */
+        /* User Stack */
         vaddr_t stack;
 
-        /* Loaded */
+        /* Whether to ignore permissions or not. When we are loading segments into memory,
+         * we need to ignore permissions (since we need to load data into read-only segements)
+         */
+        bool use_permissions;
+        /* Whether or not load_elf is finished.
+         * If load_elf is *not* finished, as->heap_start/end is continually changing as we load
+         * code/data segments. So we need to ignore the fact that we're accessing data
+         * before the stack and after the "heap," (which, under normal operation, is illegal)
+         * since each each time we load a segment we adjust as->heap_start/end.
+         * Once load_elf is done, our address space is fully set up and as->heap_start/end
+         * will only change with sbrk calls. So we must deny access to memory after the heap
+         * but before the stack. 
+         */
         bool loadelf_done;
 #endif
 };
