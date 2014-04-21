@@ -300,6 +300,7 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	int permissions = PF_RWX; //change?
 	//Allocate the page
 	struct page *page = page_alloc(as,as->stack,permissions);
+	(void) page;
 	DEBUG(DB_VM,"Heap Start before aligning: %p\n", (void*) as->heap_end);
 	//Align the heap on a page boundary:
 	int offset = as->heap_start % PAGE_SIZE;
