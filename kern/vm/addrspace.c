@@ -42,6 +42,12 @@
  * used. The cheesy hack versions in dumbvm.c are used instead.
  */
 
+/* Create an address space. We allocate space for a page directory and 
+ * some other stuff in the address space struct. We ignore permissions,
+ * and also allow load_elf to access any part of the address space as it loads
+ * segments. It would probably be better to put some of this in as_prepare_load,
+ * for better readability/style, but it works here.
+ */
 struct addrspace *
 as_create(void)
 {
@@ -60,6 +66,11 @@ as_create(void)
 	return as;
 }
 
+/* Copy a process's address space. This involves walking the 
+ * page directory of the old address space, creating page tables
+ * as needed, and copying any pages that are allocated. We also need
+ * to copy permissions as well.
+ */
 int
 as_copy(struct addrspace *old, struct addrspace **ret)
 {
@@ -116,6 +127,10 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	return 0;
 }
 
+/* Destroy a process's address space. We need to walk the page
+ * table, free any pages, and then free the appropriate data structures 
+ * used by the VM system (the page directory, page tables, addrsapce struct).
+ */
 void
 as_destroy(struct addrspace *as)
 {
@@ -147,8 +162,7 @@ as_destroy(struct addrspace *as)
 }
 
 /* Shamelessly stolen from dumbvm.
- * It *should* simply invalidate all TLB entries.
- * We'll find out.
+ * It simply invalidate all TLB entries.
  */
 void
 as_activate(struct addrspace *as)
@@ -235,16 +249,6 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		cur_vaddr += PAGE_SIZE;
 	}
 
-	//Heap Moves up as we define each region
-	// as->heap_start += sz;
-	//Also define the end of heap
-	// as->heap_end = as->heap_start;
-
-	// DEBUG(DB_VM,"Region VA: %p\n",(void*) vaddr);
-	// DEBUG(DB_VM,"Region SZ: %d\n", sz);
-	// DEBUG(DB_VM,"Page Count: %d\n",pages_required);
-	// DEBUG(DB_VM,"RWX: %d%d%d\n", readable,writeable,executable);
-
 	return 0;
 }
 
@@ -277,14 +281,25 @@ as_complete_load(struct addrspace *as)
 	return 0;
 }
 
+/* Called from runprogram.c to create a user stack. The stack grows down,
+ * but obvously we allocate memory going up. So our as->stack points to the 
+ * "bottom" of the stack, farthest down the stack can grow. We allocate a single page
+ * for the stack now; if we need more, we'll allocate it later in vm_fault.
+ *
+ * We also align the heap to a page boundary now, so malloc doesn't have to do it 
+ * later. We can do this at this point because by the time this is called, all the 
+ * static regions have been defined. I suppose it *could* be done in as_complete_load
+ * instead, but if it ain't broke, don't fix it ;)
+ */
 int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
+	//Get the lowest address of the stack
 	as->stack = (vaddr_t) USERSTACK - PAGE_SIZE;
+	//Set permissions
 	int permissions = PF_RWX; //change?
+	//Allocate the page
 	struct page *page = page_alloc(as,as->stack,permissions);
-	vaddr_t stack_page_va = page->va;
-	(void) stack_page_va;
 	DEBUG(DB_VM,"Heap Start before aligning: %p\n", (void*) as->heap_end);
 	//Align the heap on a page boundary:
 	int offset = as->heap_start % PAGE_SIZE;
