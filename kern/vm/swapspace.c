@@ -13,29 +13,60 @@
 
 /* Pointer to swap hdd, lhd1raw: */
 static struct vnode* swapspace;
+
+/* Selection of the hdd to use. 
+	Using hdd1 cuz we are rebels. */
+//static char swap_disk[] = "lhd0raw:";
 static char swap_disk[] = "lhd1raw:";
 
 int swapspace_init(void)
 {
 	int result;
 
+	// Open the hard drive for reading/writing.
 	result = vfs_open(swap_disk, O_RDWR, 0, &swapspace);
 	KASSERT(swapspace != NULL);
 
+	// Make it known if all went well.
 	if (result) {
 		kprintf("Something has gone wrong with the swap disk: err %d\n",result);
 	}
 	else {
-		kprintf("Mounted lhd1raw as swapspace.\n");
+		kprintf("Mounted %s as the swap disk.\n", swap_disk);
 	}
+
+	return result;
+}
+
+/* Contains uio setup and execution for writting page to disk. */
+static
+int write_page(int swap_index)
+{
+	(void)swap_index;
+	int result = 0;
+
+	return result;
+}
+
+/* Contains uio setup and execution for reading page from disk. */
+static
+int read_page(int swap_index/*needs mem location to write to*/)
+{
+	(void)swap_index;
+	int result = 0;
 
 	return result;
 }
 
 /* Evict a CLEAN page from memory. Called by page swapping algorithm */
 
-//void evict_page(void/*as, va*/)
-//{
+int evict_page(struct addrspace* as, vaddr_t va)
+{
+	(void)as;
+	(void)va;
+
+	int result = 0;
+
 	// check coremap do i have?
 	// Lock coremap
 
@@ -50,11 +81,22 @@ int swapspace_init(void)
 	
 	// Unlock core map
 
-//	return;
-//}
+	return result;
 
-//void swapoout_page(void/*as, va*/)
-//{
+}
+
+/* Swap the specified page out to disk; maked page clean but
+	does NOT evict the page. */
+int swapout_page(struct addrspace* as, vaddr_t va)
+{
+	(void)as;
+	(void)va;	
+
+	int result = 0;
+	int swap_index;
+
+	write_page(swap_index);
+
 	// check coremap lock do i have?
 	//lock coremap
 
@@ -75,11 +117,20 @@ int swapspace_init(void)
 	// mark page as CLEAN
 	// release coremap lock
 
-//	return;
-//}
+	return result;
+}
 
-//void swapin_page(void/*as,va*/)
-//{
+/* Swap the specified page back into memory. */
+int swapin_page(struct addrspace* as, vaddr_t va)
+{
+	(void)as;
+	(void)va;
+
+	int result = 0;
+	int swap_index;
+
+	read_page(swap_index);
+
 	// check coremap do i have?
 	// lock cremap
 
@@ -102,8 +153,8 @@ int swapspace_init(void)
 	// mark page as DIRTY
 	//release coremap lock
 
-	//return;
-//}
+	return result;
+}
 
 
 
