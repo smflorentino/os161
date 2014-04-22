@@ -262,6 +262,9 @@ copy_page(struct page *src, struct page *dst)
 	memcpy(dst,src,sizeof(struct page));
 }
 
+/* Allocate pages BEFORE the VM is bootstrapped.
+ * Steals memory.
+ */
 static
 paddr_t
 getppages(unsigned long npages)
@@ -289,10 +292,11 @@ memset(void *ptr, int ch, size_t len)
 	}
 }
 
+/* Zero a page. Called during allocation */
 /* Calls function above. Might need to change later,
 but works for KVAs at the time being 
-//TODO use UIO? or word-aligned setting
-for metter performance?? */
+//TODO use UIO word-aligned setting
+for better performance?? */
 static
 void
 zero_page(size_t page_num)
@@ -302,7 +306,7 @@ zero_page(size_t page_num)
 	memset((void*) ptr,'\0',PAGE_SIZE);
 }
 
-/* Called by kpage_alloc and page_nalloc for KERNEL pages*/
+/* Allocate a page for use by the kernel */
 static
 void 
 allocate_fixed_page(size_t page_num)
@@ -318,6 +322,7 @@ allocate_fixed_page(size_t page_num)
 	// DEBUG(DB_VM, "AF:%d\n",free_pages);
 }
 
+/* Allocate a page in a user address space */
 static
 void
 allocate_nonfixed_page(size_t page_num, struct addrspace *as, vaddr_t va, int permissions)
@@ -369,6 +374,7 @@ free_fixed_page(size_t page_num)
 	// }
 }
 
+/* Allocate a page. Either kernel or user. */
 struct page *
 page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 {
@@ -404,6 +410,8 @@ page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 	return 0x0;
 }
 
+
+/* Called by alloc_kpages */
 static
 vaddr_t
 page_nalloc(int npages)
@@ -473,7 +481,7 @@ vaddr_t alloc_kpages(int npages)
 	return t;
 }
 
-/* Free a page */
+/* Free a page, either user or kernel. */
 void free_kpages(vaddr_t addr)
 {
 	if(addr < 0x80000000)
