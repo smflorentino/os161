@@ -343,6 +343,7 @@ file filesupport/filesupport.c
 
 file      vm/smartvm.c
 file      vm/kmalloc.c
+file      vm/swapspace.c
 
 
 optofffile dumbvm   vm/addrspace.c
