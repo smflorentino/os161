@@ -45,8 +45,8 @@
 //#include <stdio.h>
 //
 
-//#undef MALLOCDEBUG
-#define MALLOCDEBUG
+#undef MALLOCDEBUG
+//#define MALLOCDEBUG
 
 #if defined(__mips__) || defined(__i386__)
 #define MALLOC32

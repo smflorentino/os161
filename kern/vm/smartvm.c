@@ -504,8 +504,9 @@ void free_kpages(vaddr_t addr)
 
 
 /* Evict a CLEAN page from memory. Called by page swapping algorithm */
-void evict_page(void/*as, va*/)
-{
+
+//void evict_page(void/*as, va*/)
+//{
 	// check coremap do i have?
 	// Lock coremap
 
@@ -520,11 +521,11 @@ void evict_page(void/*as, va*/)
 	
 	// Unlock core map
 
-	return;
-}
+//	return;
+//}
 
-void swapoout_page(void/*as, va*/)
-{
+//void swapoout_page(void/*as, va*/)
+//{
 	// check coremap lock do i have?
 	//lock coremap
 
@@ -545,11 +546,11 @@ void swapoout_page(void/*as, va*/)
 	// mark page as CLEAN
 	// release coremap lock
 
-	return;
-}
+//	return;
+//}
 
-void swapin_page(void/*as,va*/)
-{
+//void swapin_page(void/*as,va*/)
+//{
 	// check coremap do i have?
 	// lock cremap
 
@@ -572,8 +573,8 @@ void swapin_page(void/*as,va*/)
 	// mark page as DIRTY
 	//release coremap lock
 
-	return;
-}
+	//return;
+//}
 
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown_all(void)
