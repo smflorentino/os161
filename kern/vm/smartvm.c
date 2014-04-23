@@ -37,7 +37,7 @@ static char tlb_offering = 0;
 static size_t free_pages;
 /* TODO figure out how to do this. I'll probably kmalloc it in
 vm_bootstrap after we set the correct flag.*/ 
-static struct lock *core_map_lock = NULL;
+struct lock *core_map_lock = NULL;
 
 /* Initialization function */
 void vm_bootstrap() 

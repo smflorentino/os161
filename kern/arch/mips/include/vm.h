@@ -88,6 +88,12 @@
    Max permissions are RWX, or 111 (hence 0x7) */
 #define PTE_TO_PERMISSIONS(pte) (pte & 0x00000007)
 
+/* Get the location of the page: 00 = physical memory, 01 = swap space, 11 = being swapped.
+   Bit positions are 5 and 6; just above reference. */
+#define PTE_TO_LOCATION(pte) (pte & 0x000000A0)
+#define PTE_PM 			0x00 	// Located in physical memory
+#define PTE_SWAP		0x30 	// Located in swap space
+
 /*
  * The top of user space. (Actually, the address immediately above the
  * last valid user address.)

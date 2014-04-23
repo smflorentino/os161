@@ -65,6 +65,7 @@
  	page_state_t state;
  };
 
+extern struct lock *core_map_lock;
 
 /* Initialization function */
 void vm_bootstrap(void);

@@ -8,6 +8,8 @@
 #include <swapspace.h>
 #include <vfs.h>
 #include <kern/fcntl.h>
+#include <vm.h>
+#include <synch.h>
 
 
 
@@ -18,6 +20,10 @@ static struct vnode* swapspace;
 	Using hdd1 cuz we are rebels. */
 //static char swap_disk[] = "lhd0raw:";
 static char swap_disk[] = "lhd1raw:";
+
+// Array of swap entry pointers. Walk this to find your swapped page.
+// Locate the page by comparing the as and the va.
+static struct swap_entry *swap_table[SWAP_MAX];
 
 int swapspace_init(void)
 {
@@ -60,26 +66,38 @@ int read_page(int swap_index/*needs mem location to write to*/)
 
 /* Evict a CLEAN page from memory. Called by page swapping algorithm */
 
-int evict_page(struct addrspace* as, vaddr_t va)
+int evict_page(struct page* page)
 {
-	(void)as;
-	(void)va;
+	//(void)page;
 
-	int result = 0;
+	volatile int result = 0;
 
 	// check coremap do i have?
 	// Lock coremap
+	bool holdlock = lock_do_i_hold(core_map_lock);
+	if(!holdlock) {
+		lock_acquire(core_map_lock);
+	}
 
 	// Double check that the page exists
 	// Double check that page is clean.
+	KASSERT(page->state == CLEAN);
 
 	// Shootdown the TLB
+	//vm_tlbshootdown();
 
 	// Update the Page Table to list the page as swapped
+	struct page_table *pt = pgdir_walk(page->as,page->va,false);
+	int pt_index = VA_TO_PT_INDEX(page->va);
+	pt->table[pt_index] ^= PTE_SWAP;		// This flips the bit to indicate 
+	KASSERT(pt->table[pt_index] & PTE_SWAP); // Check that the bit was set correctly.
 
 	// Update the coremap to list the physical page as free
-	
+	// Will probably break since kernel vaddr check will fail in free_kpages()
+	free_kpages(page->va);
+
 	// Unlock core map
+	lock_release(core_map_lock);
 
 	return result;
 
@@ -96,6 +114,9 @@ int swapout_page(struct addrspace* as, vaddr_t va)
 	int swap_index;
 
 	write_page(swap_index);
+
+	swap_table[swap_index]->as = as;
+	swap_table[swap_index]->va = va;
 
 	// check coremap lock do i have?
 	//lock coremap
