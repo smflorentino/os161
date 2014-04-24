@@ -226,7 +226,7 @@ kmain(char *arguments)
 
 	init_process_create("init");	// Create first process
 	console_init();					// Open console and attach to first process
-	swapspace_init();				// Open hdd 1 for swapping
+	swapspace_init();				// Open hdd for swapping
 
 	DEBUG(DB_EXEC, "Finished boot()");
 
