@@ -44,8 +44,10 @@ main(int argc, char* argv[])
 	void *x;
 	printf("Hello World 50q000\n");
 	printf("Hello World 50q000\n");
-	x = malloc(500000);
-	x = malloc(10);
+	while(1){
+		x = malloc(4000);
+	}
+	//x = malloc(10);
 	//printf("x = %d\n", (int)x);
 	//x = x + 1;
 	printf("Hello World 2\n");

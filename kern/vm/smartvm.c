@@ -18,6 +18,7 @@
 #include <current.h>
 #include <spl.h>
 #include <elf.h>
+#include <swapspace.h>
 /*
  * Wrap rma_stealmem in a spinlock.
  */
@@ -378,11 +379,24 @@ free_fixed_page(size_t page_num)
 struct page *
 page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 {
+	
+	
+
 	bool holdlock = spinlock_do_i_hold(&stealmem_lock);
 	if(!holdlock)
 	{
 		spinlock_acquire(&stealmem_lock);
 	}
+
+
+	// We are out of free pages and need to swart swapping
+	// Choose #7 for right now as test; swap alg will be used later
+	int random_index = page_count - 20;
+	if(free_pages <= 10) {
+		swapout_page(&core_map[random_index]);
+		evict_page(&core_map[random_index]);
+	}
+
 	for(size_t i = 0;i<page_count;i++)
 	{
 		if(core_map[i].state == FREE)
@@ -406,6 +420,7 @@ page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 		}
 	}
 	spinlock_release(&stealmem_lock);
+
 	panic("No available pages for single page alloc!");
 	return 0x0;
 }
@@ -417,6 +432,15 @@ vaddr_t
 page_nalloc(int npages)
 {
 	spinlock_acquire(&stealmem_lock);
+
+	// We are out of free pages and need to swart swapping
+	// Choose #7 for right now as test; swap alg will be used later
+	int random_index = page_count - 20;
+	if(free_pages <= 10) {
+		swapout_page(&core_map[random_index]);
+		evict_page(&core_map[random_index]);
+	}
+
 	bool blockStarted = false;
 	int pagesFound = 0;
 	int startingPage = 0;

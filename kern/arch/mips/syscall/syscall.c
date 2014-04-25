@@ -725,9 +725,9 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 
 	// Return bytes read
 	*retval = buflen - u.uio_resid;
-	if(u.uio_resid != 0) {
-		kprintf("Haven't finished reading\n");
-	}
+	//if(u.uio_resid != 0) {
+	//	kprintf("Haven't finished reading\n");
+	//}
 
 	return 0;
 }
@@ -926,7 +926,7 @@ sys_chdir(const char* pathname, int* retval)
 
 	if(pathname == NULL) {
 		// Pathname is an invalid pointer.
-		kprintf("EFAULT in chdir");
+		//kprintf("EFAULT in chdir");
 		return EFAULT;
 	}
 

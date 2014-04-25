@@ -22,7 +22,7 @@ static char swap_disk[] = "lhd1raw:";
 
 // Array of swap entry pointers. Walk this to find your swapped page.
 // Locate the page by comparing the page structure.
-static struct page *swap_table[SWAP_MAX];
+static struct swap_entry swap_table[SWAP_MAX];
 
 int swapspace_init(void)
 {
@@ -44,7 +44,7 @@ int swapspace_init(void)
 	// TODO: is the NULL init correct below?
 	for (int i = 0; i < SWAP_MAX; i++) {
 		//swap_table[i]->page = NULL;
-		swap_table[i] = NULL;
+		swap_table[i].as = NULL;
 	}
 
 	return result;
@@ -159,7 +159,7 @@ int swapout_page(struct page* page)
 	// Check swap space to see if this page is already there...
 	swap_index = -1;	// -1 is an invalid index
 	for (int i=0; i < SWAP_MAX; i++) {
-		if (swap_table[i]->as == page->as && swap_table[i]->va == page->va) {
+		if (swap_table[i].as == page->as && swap_table[i].va == page->va) {
 			swap_index = i;
 			break;
 		}
@@ -168,7 +168,7 @@ int swapout_page(struct page* page)
 	// ...if not, find free swap space.
 	if (swap_index < 0) {
 		for (int i=0; i < SWAP_MAX; i++) {
-			if (swap_table[i] == NULL) {
+			if (swap_table[i].as == NULL) {
 				swap_index = i;
 				break;
 			}
@@ -187,8 +187,8 @@ int swapout_page(struct page* page)
 
 	// Update swap bit map for new location as occupied
 	// Update swap table so we can find this page later
-	swap_table[swap_index]->as = page->as;
-	swap_table[swap_index]->va = page->va;
+	swap_table[swap_index].as = page->as;
+	swap_table[swap_index].va = page->va;
 
 	// Write page to disk
 	write_page(swap_index, page->pa);
@@ -237,7 +237,7 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 	// Locate the swapped page in the swap table
 	swap_index = -1;	// -1 is an invalid index
 	for (int i=0; i < SWAP_MAX; i++) {
-		if (swap_table[i]->as == as && swap_table[i]->va == va) {
+		if (swap_table[i].as == as && swap_table[i].va == va) {
 			swap_index = i;
 			break;
 		}
