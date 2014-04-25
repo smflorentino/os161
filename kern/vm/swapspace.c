@@ -67,6 +67,8 @@ int write_page(int swap_index, paddr_t page)
 	uio_kinit(&iov, &page_write_uio, (void*)page, PAGE_SIZE, pos, UIO_WRITE);
 	result = VOP_WRITE(swapspace, &page_write_uio);
 
+	// Need to wait for write to finish?
+
 	return result;
 }
 
@@ -86,6 +88,8 @@ int read_page(int swap_index, paddr_t page)
 
 	uio_kinit(&iov, &page_read_uio, (void*)page, PAGE_SIZE, pos, UIO_READ);
 	result = VOP_READ(swapspace, &page_read_uio);
+
+	// Need to wait for read to finish?
 
 	return result;
 }
@@ -147,12 +151,15 @@ int swapout_page(struct page* page)
 	// double check that page is dirty
 	KASSERT(page->state == DIRTY);
 
+	// Only handling singe pages right now
+	KASSERT(page->npages == 1);
+
 	// mark page as SWAPPING IN PROGRESS
 
 	// Check swap space to see if this page is already there...
 	swap_index = -1;	// -1 is an invalid index
 	for (int i=0; i < SWAP_MAX; i++) {
-		if (swap_table[i] == page) {
+		if (swap_table[i]->as == page->as && swap_table[i]->va == page->va) {
 			swap_index = i;
 			break;
 		}
@@ -176,11 +183,17 @@ int swapout_page(struct page* page)
 
 	// Write zeros to swap?
 
+	// Lock the swap_table lock, since it's shared
+
 	// Update swap bit map for new location as occupied
 	// Update swap table so we can find this page later
-	swap_table[swap_index] = page;
+	swap_table[swap_index]->as = page->as;
+	swap_table[swap_index]->va = page->va;
+
 	// Write page to disk
 	write_page(swap_index, page->pa);
+
+	// Unlock the swap_lock
 
 	// Unlock core map to sleep
 	//lock_release(core_map_lock);
@@ -198,35 +211,66 @@ int swapout_page(struct page* page)
 }
 
 /* Swap the specified page back into memory. */
-int swapin_page(struct page* page)
+int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 {
-	(void)page;
 
-	int result = 0;
+	// Check for free space in memory (finding the free space is the swap alg's job)
+	KASSERT(page->as == NULL);
+	KASSERT(as != NULL);
+
+	volatile int result = 0;	// Incase we want to pass infor back up.
 	int swap_index;
 
-	read_page(swap_index, page->pa);
+
 
 	// check coremap do i have?
 	// lock cremap
 
 	// double check that page exists
 	// double check that page is swapped
+	struct page_table *pt = pgdir_walk(as,va,false);
+	int pt_index = VA_TO_PT_INDEX(va);
+	KASSERT(pt->table[pt_index] & PTE_SWAP); // Check that the page is swapped.
 
-	// Check for free space in memory
+	// lock the swap table
+
+	// Locate the swapped page in the swap table
+	swap_index = -1;	// -1 is an invalid index
+	for (int i=0; i < SWAP_MAX; i++) {
+		if (swap_table[i]->as == as && swap_table[i]->va == va) {
+			swap_index = i;
+			break;
+		}
+	}
+
+	// Unlock swap table
+
+	// ...if not, no swapped page exists...
+	if(swap_index < 0) {
+		panic("Tried to swap in a non-existant page.");
+	}
+
+
+
+		// (below will be job of swapping algorithm)
 		//if space found, continue with swap in
 		// if not free space:
 			// Pick page to swap out
 			//swapout_page()
 			//evict()
-
 	// write zeros to the evicted physical page
 	// mark page as SWAPPING IN PROGRESS
-		// swap in the page
+
+	// swap in the page
+	read_page(swap_index, page->pa);
+
 	// release coremap lock
 	// sleep until swap in completes
 	// lock coremap
+
 	// mark page as DIRTY
+	page->state = DIRTY;
+
 	//release coremap lock
 
 	return result;
