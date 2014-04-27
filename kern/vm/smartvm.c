@@ -508,11 +508,17 @@ vaddr_t alloc_kpages(int npages)
 /* Free a page, either user or kernel. */
 void free_kpages(vaddr_t addr)
 {
+	bool lock_acquired = 0;
+
 	if(addr < 0x80000000)
 	{
-		panic("Tried to free a direct-mapped address");	
+		panic("Tried to free a direct-mapped address\n");	
 	}
-	spinlock_acquire(&stealmem_lock);
+	if(!spinlock_do_i_hold(&stealmem_lock)){
+		spinlock_acquire(&stealmem_lock);
+		lock_acquired = 1;
+	}
+
 	// kprintf("Freeing VA:%p\n", (void*) addr);
 	KASSERT(page_count > 0);
 	for(size_t i = 0;i<page_count;i++)
@@ -527,7 +533,10 @@ void free_kpages(vaddr_t addr)
 				free_fixed_page(j);
 			}
 			// kprintf("memory freed\n");
-			spinlock_release(&stealmem_lock);
+
+			if(lock_acquired){
+				spinlock_release(&stealmem_lock);
+			}
 			return;
 		}
 	}
@@ -539,7 +548,26 @@ void vm_tlbshootdown_all(void)
 {
 	return;
 }
+
 void vm_tlbshootdown(const struct tlbshootdown *ts)
 {
 	(void)ts;
+
+	int tlb_entry, spl;
+
+	/* Disable interrupts on this CPU while frobbing the TLB. */
+	spl = splhigh();
+	// Probe TLB so see if particular VA is present.
+	tlb_entry = tlb_probe(VA_TO_VPF(ts->ts_vaddr), 0);
+	if(tlb_entry < 0) {
+		// No entry found, so shoot down succeeded
+		splx(spl);
+		return;
+	}
+
+	// Invalidate the particular TLB entry
+	tlb_write(TLBHI_INVALID(tlb_entry), TLBLO_INVALID(), tlb_entry);
+
+	splx(spl);
+
 }

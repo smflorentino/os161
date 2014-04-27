@@ -29,6 +29,9 @@ int swapspace_init(void)
 	int result;
 
 	// Open the hard drive for reading/writing.
+	//result = vfs_open("lhd0raw:", O_RDWR, 0, &swapspace);
+	//char open_disk[10];
+	//strcpy(open_disk,swap_disk);
 	result = vfs_open(swap_disk, O_RDWR, 0, &swapspace);
 	KASSERT(swapspace != NULL);
 
@@ -37,7 +40,7 @@ int swapspace_init(void)
 		kprintf("Something has gone wrong with the swap disk: err %d\n",result);
 	}
 	else {
-		kprintf("Mounted %s as the swap disk.\n", swap_disk);
+		kprintf("Opened %s as the swap disk.\n", swap_disk);
 	}
 
 	// Initialize the swap table to be empty; no pages in swap yet!
@@ -47,6 +50,45 @@ int swapspace_init(void)
 		swap_table[i].as = NULL;
 	}
 
+/*
+	// Testing raw disk writes
+	int buff1[1024];
+	int buff2[1024];
+	for(int i = 0; i < 1024; i++) {
+		buff1[i] = 3;
+		buff2[i] = 0;
+	}
+	struct iovec iov_write;
+	struct iovec iov_read;
+	struct uio page_write_uio;
+	struct uio page_read_uio;
+
+	off_t pos = 0x100; //SIND_TO_DISK(swap_index);
+
+	uio_kinit(&iov_write, &page_write_uio, buff1, PAGE_SIZE, pos, UIO_WRITE);
+	result = VOP_WRITE(swapspace, &page_write_uio);
+
+	int j = 0;
+	while(page_write_uio.uio_resid != 0) {
+		j++;
+	}
+
+	kprintf("j = %d\n", j);
+
+	pos = 0x100;
+
+	uio_kinit(&iov_read, &page_read_uio, buff2, PAGE_SIZE, pos, UIO_READ);
+	result = VOP_READ(swapspace, &page_read_uio);
+
+	int k = 0;
+	while(page_write_uio.uio_resid != 0) {
+		k++;
+	}
+
+	kprintf("k = %d\n", k);
+
+	kprintf("result buffer = %d\n", buff2[10]);
+*/
 	return result;
 }
 
@@ -65,7 +107,7 @@ int write_page(int swap_index, paddr_t page)
 	off_t pos = SIND_TO_DISK(swap_index);
 
 	uio_kinit(&iov, &page_write_uio, (void*)page, PAGE_SIZE, pos, UIO_WRITE);
-	result = VOP_WRITE(swapspace, &page_write_uio);
+	//result = VOP_WRITE(swapspace, &page_write_uio);
 
 	// Need to wait for write to finish?
 
@@ -114,7 +156,9 @@ int evict_page(struct page* page)
 	KASSERT(page->state == CLEAN);
 
 	// Shootdown the TLB
-	//vm_tlbshootdown();
+	struct tlbshootdown tlb;
+	tlb.ts_vaddr = page->va;
+	vm_tlbshootdown(&tlb);
 
 	// Update the Page Table to list the page as swapped
 	struct page_table *pt = pgdir_walk(page->as,page->va,false);
@@ -123,7 +167,10 @@ int evict_page(struct page* page)
 	KASSERT(pt->table[pt_index] & PTE_SWAP); // Check that the bit was set correctly.
 
 	// Update the coremap to list the physical page as free
-	free_kpages(page->va);
+	//free_kpages(page->va);
+
+	vaddr_t page_location = PADDR_TO_KVADDR(page->pa);
+	free_kpages(page_location);
 
 	// Unlock core map
 	//lock_release(core_map_lock);

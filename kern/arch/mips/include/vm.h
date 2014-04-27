@@ -83,6 +83,7 @@
 //This returns the TOP 20 bits of a PA, suitable for the TLB.
  //So TLBLO_PPAGE = 0xFFFFF000
 #define PTE_TO_PFN(pte) ( (pte & 0xFFFFF000) )
+#define VA_TO_VPF(va) (va & 0xFFFFF000)
 
 /* Get the permissions on a page table entry (PTE).
    Max permissions are RWX, or 111 (hence 0x7) */
