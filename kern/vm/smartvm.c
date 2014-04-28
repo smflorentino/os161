@@ -228,6 +228,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	
 	//Translate....
 	struct page_table *pt = pgdir_walk(as,faultaddress,false);
+	KASSERT(pt != NULL);
 	int pt_index = VA_TO_PT_INDEX(faultaddress);
 	int pfn = PTE_TO_PFN(pt->table[pt_index]);
 	int permissions = PTE_TO_PERMISSIONS(pt->table[pt_index]);

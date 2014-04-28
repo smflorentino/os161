@@ -425,7 +425,7 @@ int write_page(int swap_index, paddr_t page)
 {
 	//(void)swap_index;
 	//(void)page;
-
+	page = PADDR_TO_KVADDR(page);
 	int result = 0;
 
 	struct iovec iov;
@@ -447,7 +447,7 @@ int read_page(int swap_index, paddr_t page)
 {
 	//(void)swap_index;
 	//(void)page;
-
+	page = PADDR_TO_KVADDR(page);
 	int result = 0;
 
 	struct iovec iov;
