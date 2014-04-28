@@ -377,42 +377,42 @@ int swapspace_init(void)
 
 
 	// Testing file disk writes
-	int buff1[1024];
-	int buff2[1024];
-	for(int i = 0; i < 1024; i++) {
-		buff1[i] = 3;
-		buff2[i] = 0;
-	}
-	struct iovec iov_write;
-	struct iovec iov_read;
-	struct uio page_write_uio;
-	struct uio page_read_uio;
+	// int buff1[1024];
+	// int buff2[1024];
+	// for(int i = 0; i < 1024; i++) {
+	// 	buff1[i] = 3;
+	// 	buff2[i] = 0;
+	// }
+	// struct iovec iov_write;
+	// struct iovec iov_read;
+	// struct uio page_write_uio;
+	// struct uio page_read_uio;
 
-	off_t pos = 0x100; //SIND_TO_DISK(swap_index);
+	// off_t pos = 0x100; //SIND_TO_DISK(swap_index);
 
-	uio_kinit(&iov_write, &page_write_uio, buff1, PAGE_SIZE, pos, UIO_WRITE);
-	result = VOP_WRITE(swapspace, &page_write_uio);
+	// uio_kinit(&iov_write, &page_write_uio, buff1, PAGE_SIZE, pos, UIO_WRITE);
+	// result = VOP_WRITE(swapspace, &page_write_uio);
 
-	int j = 0;
-	while(page_write_uio.uio_resid != 0) {
-		j++;
-	}
+	// int j = 0;
+	// while(page_write_uio.uio_resid != 0) {
+	// 	j++;
+	// }
 
-	kprintf("j = %d\n", j);
+	// kprintf("j = %d\n", j);
 
-	pos = 0x100;
+	// pos = 0x100;
 
-	uio_kinit(&iov_read, &page_read_uio, buff2, PAGE_SIZE, pos, UIO_READ);
-	result = VOP_READ(swapspace, &page_read_uio);
+	// uio_kinit(&iov_read, &page_read_uio, buff2, PAGE_SIZE, pos, UIO_READ);
+	// result = VOP_READ(swapspace, &page_read_uio);
 
-	int k = 0;
-	while(page_write_uio.uio_resid != 0) {
-		k++;
-	}
+	// int k = 0;
+	// while(page_write_uio.uio_resid != 0) {
+	// 	k++;
+	// }
 
-	kprintf("k = %d\n", k);
+	// kprintf("k = %d\n", k);
 
-	kprintf("result buffer = %d\n", buff2[10]);
+	// kprintf("result buffer = %d\n", buff2[10]);
 
 
 	return result;

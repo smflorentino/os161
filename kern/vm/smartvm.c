@@ -34,11 +34,96 @@ static struct page *core_map;
 static size_t page_count;
 /* Round-Robin TLB entry to sacrifice >:) */
 static char tlb_offering = 0;
+/* Round-Robin Page to sacrifice >:) */
+static volatile short page_offering = 0;
 /* Number of free pages in memory  */
 static size_t free_pages;
 /* TODO figure out how to do this. I'll probably kmalloc it in
 vm_bootstrap after we set the correct flag.*/ 
 struct lock *core_map_lock = NULL;
+
+/* Get the coremap lock, unless we already have it. 
+ * It's like of modeled like the splhigh/splx methods.
+ * Store the result of this method and pass it to 
+ * release_coremap_lock when you're done */
+static
+bool
+get_coremap_lock()
+{
+	if(spinlock_do_i_hold(&stealmem_lock))
+	{
+		return 0;
+	}
+	else
+	{
+		spinlock_acquire(&stealmem_lock);
+		return 1;
+	}
+}
+
+/* Release the coremap lock, unless we still expect the lock
+ * further up the stack. Modeled after splhigh/splx code,
+ * see the comments on the above method as well.
+ */
+static
+void
+release_coremap_lock(bool release)
+{
+	if(release)
+	{
+		spinlock_release(&stealmem_lock);
+	}
+}
+/* Returns the next available index of a page we're going to page to disk. 
+ * We do this round robin style at the moment, but I suppose we could change to
+ * random at a later time, or even LRU with some tweaks to this method.
+ */
+static 
+size_t
+get_a_dirty_page_index()
+{
+	//Some shenanigans here. This will be preserved throughout the life of the program. 
+	static size_t current_index = 0;
+
+	//Once we hit the end of RAM, go back to the start.
+	if(current_index == page_count)
+	{
+		current_index = 0;
+	}
+	for(size_t i = current_index; i<page_count; i++)
+	{
+		current_index++;
+		if(core_map[i].state == DIRTY)
+		{
+			//Since we increment before the if statement (for next time)
+			//Subtract one and then return.
+			return current_index-1;
+		}
+	}
+
+	panic("Get dirty page index is broken!");
+	return -1;
+}
+
+/* Called in page_alloc ONLY at the moment. This *should* be the only place
+ * where we'll need to worry about swapping. If we're out of space when allocating
+ * kernel pages in page_nalloc, we'll know (panic) and then we can fix it from there.
+ * This method will page available IF NEEDED - i.e. if there are less than 10 free
+ * pages on the system, we'll start swapping. If not, we simply return.
+ */
+static
+void
+make_page_available()
+{
+	bool lock = get_coremap_lock();
+	if(free_pages <= 10) {
+		size_t rr_page = get_a_dirty_page_index();
+		swapout_page(&core_map[rr_page]);
+		evict_page(&core_map[rr_page]);
+	}
+
+	release_coremap_lock(lock);
+}
 
 /* Initialization function */
 void vm_bootstrap() 
@@ -146,11 +231,11 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	int pt_index = VA_TO_PT_INDEX(faultaddress);
 	int pfn = PTE_TO_PFN(pt->table[pt_index]);
 	int permissions = PTE_TO_PERMISSIONS(pt->table[pt_index]);
+	int swapped = PTE_TO_LOCATION(pt->table[pt_index]);
 	/*If the PFN is 0, we might need to dynamically allocate
 	on the stack or the heap */
 	if(pfn == 0)
 	{
-
 		//Stack
 		if(faultaddress < as->stack && faultaddress > USER_STACK_LIMIT)
 		{
@@ -168,12 +253,21 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		}
 	}
 
-	//Try translating again...
+	/*We grew the stack and/or heap dynamically. Try translating again */
 	pt = pgdir_walk(as,faultaddress,false);
 	pt_index = VA_TO_PT_INDEX(faultaddress);
 	pfn = PTE_TO_PFN(pt->table[pt_index]);
 	// DEBUG(DB_VM,"PTE:%p\n",(void*) pt->table[pt_index]);
 	permissions = PTE_TO_PERMISSIONS(pt->table[pt_index]);
+	swapped = PTE_TO_LOCATION(pt->table[pt_index]);
+	/* If we're swapped out, time to do some extra stuff. */
+	if(swapped)
+	{
+		//TODO get the page back in to ram. 
+		//Does this work?
+		struct page *page = page_alloc(as,faultaddress,permissions);
+		swapin_page(as,faultaddress,page);
+	}
 	// DEBUG(DB_VM, "PTERWX:%d\n",permissions);
 	//Page is writable if permissions say so or if we're ignoring permissions.
 	bool writable = (permissions & PF_W) || !(as->use_permissions);
@@ -378,23 +472,10 @@ free_fixed_page(size_t page_num)
 struct page *
 page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 {
-	
-	
+	bool lock = get_coremap_lock();
 
-	bool holdlock = spinlock_do_i_hold(&stealmem_lock);
-	if(!holdlock)
-	{
-		spinlock_acquire(&stealmem_lock);
-	}
-
-
-	// We are out of free pages and need to swart swapping
-	// Choose #7 for right now as test; swap alg will be used later
-	int random_index = page_count - 20;
-	if(free_pages <= 10) {
-		swapout_page(&core_map[random_index]);
-		evict_page(&core_map[random_index]);
-	}
+	//Make a page available for allocation, if needed.
+	make_page_available();
 
 	for(size_t i = 0;i<page_count;i++)
 	{
@@ -411,14 +492,11 @@ page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 				allocate_nonfixed_page(i,as,va,permissions);
 			}
 			core_map[i].npages = 1;
-			if(!holdlock)
-			{
-				spinlock_release(&stealmem_lock);
-			}
+			release_coremap_lock(lock);
 			return &core_map[i];
 		}
 	}
-	spinlock_release(&stealmem_lock);
+	release_coremap_lock(lock);
 
 	panic("No available pages for single page alloc!");
 	return 0x0;
@@ -431,14 +509,6 @@ vaddr_t
 page_nalloc(int npages)
 {
 	spinlock_acquire(&stealmem_lock);
-
-	// We are out of free pages and need to swart swapping
-	// Choose #7 for right now as test; swap alg will be used later
-	int random_index = page_count - 20;
-	if(free_pages <= 10) {
-		swapout_page(&core_map[random_index]);
-		evict_page(&core_map[random_index]);
-	}
 
 	bool blockStarted = false;
 	int pagesFound = 0;
@@ -507,16 +577,12 @@ vaddr_t alloc_kpages(int npages)
 /* Free a page, either user or kernel. */
 void free_kpages(vaddr_t addr)
 {
-	bool lock_acquired = 0;
-
 	if(addr < 0x80000000)
 	{
 		panic("Tried to free a direct-mapped address\n");	
 	}
-	if(!spinlock_do_i_hold(&stealmem_lock)){
-		spinlock_acquire(&stealmem_lock);
-		lock_acquired = 1;
-	}
+	
+	bool lock = get_coremap_lock();
 
 	// kprintf("Freeing VA:%p\n", (void*) addr);
 	KASSERT(page_count > 0);
@@ -531,11 +597,7 @@ void free_kpages(vaddr_t addr)
 			{
 				free_fixed_page(j);
 			}
-			// kprintf("memory freed\n");
-
-			if(lock_acquired){
-				spinlock_release(&stealmem_lock);
-			}
+			release_coremap_lock(lock);
 			return;
 		}
 	}
