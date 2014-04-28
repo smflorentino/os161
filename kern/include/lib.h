@@ -93,6 +93,8 @@
 #define DB_WRITE	   0x2000
 #define DB_PROCESS	   0x4000
 
+#define DB_SWAP        0x8000
+
 extern uint32_t dbflags;
 
 /*
