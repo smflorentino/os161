@@ -65,7 +65,6 @@
  	page_state_t state;
  };
 
-extern struct lock *core_map_lock;
 
 /* Initialization function */
 void vm_bootstrap(void);
@@ -88,15 +87,6 @@ struct page * get_page(int pte);
 
 /* Copy a page */
 void copy_page(struct page *src, struct page *dst);
-
-/* Evict CLEAN page from memory. */
-//void evict_page(void/*as, va*/);
-
-/* Swap out page to disk. */
-//void swapout_page(void/*as, va*/);
-
-/* Swap in page to memory from disk. */
-//void swapin_page(void/*as, va*/);
 
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown_all(void);

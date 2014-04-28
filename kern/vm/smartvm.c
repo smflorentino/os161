@@ -140,7 +140,6 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	{
 		return EFAULT;
 	}
-	(void)faulttype;
 	
 	//Translate....
 	struct page_table *pt = pgdir_walk(as,faultaddress,false);
