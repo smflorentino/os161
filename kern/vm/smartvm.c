@@ -120,17 +120,68 @@ void
 make_page_available()
 {
 	bool lock = get_coremap_lock();
-	DEBUG(DB_SWAP, "Free Pages: %d\n",free_pages);	
+	// DEBUG(DB_SWAP, "Free Pages: %d\n",free_pages);	
 	if(free_pages <= 10) {
-		DEBUG(DB_SWAP, "Start Swap: %d\n",free_pages);	
+		// DEBUG(DB_SWAP, "Start Swap: %d\n",free_pages);	
 		size_t rr_page = get_a_dirty_page_index();
-		DEBUG(DB_SWAP, "Starting Swapout... %d\n",rr_page);
+		// DEBUG(DB_SWAP, "Starting Swapout... %d\n",rr_page);
 		swapout_page(&core_map[rr_page]);
-		DEBUG(DB_SWAP, "Starting Eviction...%d\n",rr_page);
+		// DEBUG(DB_SWAP, "Starting Eviction...%d\n",rr_page);
 		evict_page(&core_map[rr_page]);
-		DEBUG(DB_SWAP, "Evicted %d\n",rr_page);
+		// DEBUG(DB_SWAP, "Evicted %d\n",rr_page);
 	}
 
+	release_coremap_lock(lock);
+}
+
+static
+void
+make_pages_available(int npages)
+{
+	bool lock = get_coremap_lock();
+	if(free_pages <= 10) {
+		// size_t rr_page = get_a_dirty_page_index();
+		bool blockStarted = false;
+		int pagesFound = 0;
+		int startingPage = 0;
+		DEBUG(DB_SWAP, "NPages:%d\n",npages);
+		DEBUG(DB_SWAP, "Page Count:%d\n",page_count);
+		for(size_t i = 0;i < (size_t) page_count;i++)
+		{
+			DEBUG(DB_SWAP, "Page: %d State: %d\n",i,core_map[i].state);
+			page_state_t curState = core_map[i].state;
+			if(!blockStarted && (curState == DIRTY || curState == FREE))
+			{
+				blockStarted = true;
+				pagesFound = 1;
+				startingPage = i;
+			}
+			else if(blockStarted && (curState != DIRTY && curState != FREE))
+			{
+				blockStarted = false;
+				pagesFound = 0;
+			}
+			else if(blockStarted && (curState == DIRTY || curState == FREE))
+			{
+				pagesFound++;
+			}
+			if(pagesFound == npages)
+			{
+				//Swap out the block of pages, now
+				for(int j = startingPage; j<startingPage + npages; j++)
+				{
+					if(core_map[j].state == DIRTY)
+					{
+						swapout_page(&core_map[j]);
+						evict_page(&core_map[j]);	
+					}
+				}
+				release_coremap_lock(lock);
+				return;
+			}
+		}
+		panic("Couldn't find a big enough DIRTY chunk for npages!");
+	}
 	release_coremap_lock(lock);
 }
 #endif
@@ -364,9 +415,28 @@ pgdir_walk(struct addrspace *as, vaddr_t va, bool create)
 //TOOO check if page is swapped in or not
 //if its on disk, get it.
 struct page *
-get_page(int pte)
+get_page(int pdi, int pti, int pte)
 {
 	//PTE will be top 20 bits of physical address. .
+	bool swapped = PTE_TO_LOCATION(pte);
+	if(swapped)
+	{
+		struct addrspace *as = curthread->t_addrspace;
+		vaddr_t va = PD_INDEX_TO_VA(pdi) | PT_INDEX_TO_VA(pti);
+		int permissions = PTE_TO_PERMISSIONS(pte);
+
+		struct page *page = page_alloc(as,va,permissions);
+		struct page_table *pt = pgdir_walk(as,va,false);
+
+		/* Page now has a home in RAM. But set the swap bit to 1 so we can swap the page in*/
+		pt->table[pti] |= PTE_SWAP;
+		// DEBUG(DB_SWAP,"PTE (vmfault)2:%p\n",(void*) pt->table[pt_index]);
+		swapin_page(as,va,page);
+		/* Page was swapped back in. Re-translate */
+		pt = pgdir_walk(as,va,false);
+		pte = pt->table[pti];
+
+	}
 	pte = pte / PAGE_SIZE;
 	return &core_map[pte];
 }
@@ -540,10 +610,7 @@ page_nalloc(int npages)
 
 	#ifdef SWAPPING_ENABLED
 	//Make a page available for allocation, if needed.
-	for(int i=0;i<npages;i++)
-	{
-		make_page_available();
-	}
+	make_pages_available(npages);
 	#endif
 
 	for(size_t i = 0;i<page_count;i++)

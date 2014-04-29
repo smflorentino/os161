@@ -103,7 +103,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 					//Get page permissions
 					int permissions = PTE_TO_PERMISSIONS(pt_entry);
 					//Locate the old page
-					struct page *oldpage = get_page(pt_entry);
+					struct page *oldpage = get_page(i,pte,pt_entry);
 					//Allocate a new page
 					struct page *newpage = page_alloc(newas,oldpage->va,permissions);
 					vaddr_t new_page_va = PADDR_TO_KVADDR(newpage->pa);
@@ -148,7 +148,12 @@ as_destroy(struct addrspace *as)
 				//If a page exists at this entry in the table, free it.
 				if(pt_entry != 0x0)
 				{
-					struct page *page = get_page(pt_entry);
+					int swapped = PTE_TO_LOCATION(pt_entry);
+					if(swapped)
+					{
+						continue;
+					}
+					struct page *page = get_page(i,j,pt_entry);
 					vaddr_t page_location = PADDR_TO_KVADDR(page->pa);
 					free_kpages(page_location);
 				}
