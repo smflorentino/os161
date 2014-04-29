@@ -102,7 +102,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 				{
 					//Get page permissions
 					int permissions = PTE_TO_PERMISSIONS(pt_entry);
-					//Locate the old page
+					//Locate the old page (swap if in, if needed)
 					struct page *oldpage = get_page(i,pte,pt_entry);
 					//Allocate a new page
 					struct page *newpage = page_alloc(newas,oldpage->va,permissions);
@@ -149,8 +149,11 @@ as_destroy(struct addrspace *as)
 				if(pt_entry != 0x0)
 				{
 					int swapped = PTE_TO_LOCATION(pt_entry);
+					//If swapped, we don't need to load the page.
+					//But we do need to delete it from the swap file
 					if(swapped)
 					{
+						//TODO remove page from swap file
 						continue;
 					}
 					struct page *page = get_page(i,j,pt_entry);

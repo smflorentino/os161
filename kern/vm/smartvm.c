@@ -47,7 +47,6 @@ struct lock *core_map_lock = NULL;
  * It's like of modeled like the splhigh/splx methods.
  * Store the result of this method and pass it to 
  * release_coremap_lock when you're done */
-static
 bool
 get_coremap_lock()
 {
@@ -66,7 +65,6 @@ get_coremap_lock()
  * further up the stack. Modeled after splhigh/splx code,
  * see the comments on the above method as well.
  */
-static
 void
 release_coremap_lock(bool release)
 {
@@ -86,13 +84,15 @@ get_a_dirty_page_index()
 	//Some shenanigans here. This will be preserved throughout the life of the program. 
 	static volatile size_t current_index = 0;
 	bool lock = get_coremap_lock();
-	// DEBUG(DB_SWAP,"DPI: %d\n", current_index);
+	DEBUG(DB_SWAP, "Finding a DPI...\n");
 	for(size_t i = current_index; i<page_count; i++)
 	{
+		DEBUG(DB_SWAP,"DPI: %d\n", i);
 		if(core_map[i].state == DIRTY)
 		{
 			//Since we increment before the if statement (for next time)
 			//Subtract one and then return.
+			DEBUG(DB_SWAP, "RR Index: %d\n",i);
 			current_index = i+1;
 			release_coremap_lock(lock);
 			return i;
@@ -108,20 +108,21 @@ get_a_dirty_page_index()
 	return -1;
 }
 
-/* Called in page_alloc ONLY at the moment. This *should* be the only place
- * where we'll need to worry about swapping. If we're out of space when allocating
- * kernel pages in page_nalloc, we'll know (panic) and then we can fix it from there.
+
+ #ifdef SWAPPING_ENABLED
+
+/* Called in page_alloc ONLY at the moment.
  * This method will page available IF NEEDED - i.e. if there are less than 10 free
  * pages on the system, we'll start swapping. If not, we simply return.
  */
- #ifdef SWAPPING_ENABLED
 static
 void
 make_page_available()
 {
 	bool lock = get_coremap_lock();
-	// DEBUG(DB_SWAP, "Free Pages: %d\n",free_pages);	
-	if(free_pages <= 10) {
+	DEBUG(DB_SWAP, "Free Pages: %d\n",free_pages);	
+	if(free_pages <= 12) {
+		DEBUG(DB_SWAP, "Making page available\n");
 		// DEBUG(DB_SWAP, "Start Swap: %d\n",free_pages);	
 		size_t rr_page = get_a_dirty_page_index();
 		// DEBUG(DB_SWAP, "Starting Swapout... %d\n",rr_page);
@@ -134,19 +135,28 @@ make_page_available()
 	release_coremap_lock(lock);
 }
 
+/* Called in page_nalloc ONLY at the moment.
+ * This method will page available IF NEEDED - i.e. if there are less than 10 free
+ * pages on the system, we'll start swapping. If not, we simply return. 
+ * 
+ */
 static
 void
-make_pages_available(int npages)
+make_pages_available(int npages, bool retry)
 {
 	bool lock = get_coremap_lock();
 	if(free_pages <= 10) {
-		// size_t rr_page = get_a_dirty_page_index();
+		size_t rr_page = get_a_dirty_page_index();
+		if(retry)
+		{
+			rr_page = 0;
+		}
 		bool blockStarted = false;
 		int pagesFound = 0;
 		int startingPage = 0;
 		DEBUG(DB_SWAP, "NPages:%d\n",npages);
 		DEBUG(DB_SWAP, "Page Count:%d\n",page_count);
-		for(size_t i = 0;i < (size_t) page_count;i++)
+		for(size_t i = rr_page;i < (size_t) page_count;i++)
 		{
 			DEBUG(DB_SWAP, "Page: %d State: %d\n",i,core_map[i].state);
 			page_state_t curState = core_map[i].state;
@@ -180,7 +190,15 @@ make_pages_available(int npages)
 				return;
 			}
 		}
-		panic("Couldn't find a big enough DIRTY chunk for npages!");
+		//If we get here, we reached the end of memory. Try again ONCE.
+		if(retry)
+		{
+			panic("Couldn't swap a big enough chunk for npages!");
+		}
+		else
+		{
+			make_pages_available(npages,true);
+		}
 	}
 	release_coremap_lock(lock);
 }
@@ -411,26 +429,29 @@ pgdir_walk(struct addrspace *as, vaddr_t va, bool create)
 	return pt;
 }
 
-/* Given a page table entry, return the page*/
-//TOOO check if page is swapped in or not
-//if its on disk, get it.
+/* Given a page table entry, return the page.
+ * We pass in the page directory index and page table index 
+ * so we can re-create the virtual address if we need to.
+ *
+ * If the page was swapped out on disk, swap it in before returning. */
 struct page *
 get_page(int pdi, int pti, int pte)
 {
-	//PTE will be top 20 bits of physical address. .
 	bool swapped = PTE_TO_LOCATION(pte);
 	if(swapped)
 	{
+		//Get the address space, virtual address, and permissions from PTE.
 		struct addrspace *as = curthread->t_addrspace;
 		vaddr_t va = PD_INDEX_TO_VA(pdi) | PT_INDEX_TO_VA(pti);
 		int permissions = PTE_TO_PERMISSIONS(pte);
 
+		//Allocate a page
 		struct page *page = page_alloc(as,va,permissions);
 		struct page_table *pt = pgdir_walk(as,va,false);
 
 		/* Page now has a home in RAM. But set the swap bit to 1 so we can swap the page in*/
 		pt->table[pti] |= PTE_SWAP;
-		// DEBUG(DB_SWAP,"PTE (vmfault)2:%p\n",(void*) pt->table[pt_index]);
+		//Swap the page in
 		swapin_page(as,va,page);
 		/* Page was swapped back in. Re-translate */
 		pt = pgdir_walk(as,va,false);
@@ -565,7 +586,7 @@ struct page *
 page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 {
 	bool lock = get_coremap_lock();
-
+	DEBUG(DB_SWAP, "Need page for %p\n",(void*) va);
 	#ifdef SWAPPING_ENABLED
 	//Make a page available for allocation, if needed.
 	make_page_available();
@@ -578,11 +599,13 @@ page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 			if(as == NULL)
 			{
 				KASSERT(va == 0x0);
+				DEBUG(DB_SWAP, "Getting page %d for FIXED\n",i);
 				allocate_fixed_page(i);				
 			}
 			else
 			{
 				KASSERT(va != 0x0);
+				DEBUG(DB_SWAP, "Getting page %d for %p\n",i, (void*) va);
 				allocate_nonfixed_page(i,as,va,permissions);
 			}
 			core_map[i].npages = 1;
@@ -610,7 +633,7 @@ page_nalloc(int npages)
 
 	#ifdef SWAPPING_ENABLED
 	//Make a page available for allocation, if needed.
-	make_pages_available(npages);
+	make_pages_available(npages,false);
 	#endif
 
 	for(size_t i = 0;i<page_count;i++)
@@ -632,6 +655,8 @@ page_nalloc(int npages)
 		}
 		if(pagesFound == npages)
 		{
+			DEBUG(DB_SWAP, "Getting %d npages %d-%d for FIXED\n",npages,startingPage,startingPage+npages-1);
+
 			//Allocate the block of pages, now.
 			for(int j = startingPage; j<startingPage + npages; j++)
 			{

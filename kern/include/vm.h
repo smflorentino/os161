@@ -88,6 +88,10 @@ struct page * get_page(int pdi,int pti,int pte);
 /* Copy a page */
 void copy_page(struct page *src, struct page *dst);
 
+/* Functions to get core map lock*/
+bool get_coremap_lock(void);
+void release_coremap_lock(bool);
+
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown_all(void);
 void vm_tlbshootdown(const struct tlbshootdown *);

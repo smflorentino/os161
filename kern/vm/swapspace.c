@@ -374,7 +374,6 @@ int swapspace_init(void)
 		//swap_table[i]->page = NULL;
 		swap_table[i].as = NULL;
 	}
-
 	// struct page *page = page_alloc(0x0,0x0,0);
 	// page->state = DIRTY;
 
@@ -480,6 +479,7 @@ int evict_page(struct page* page)
 	//if(!holdlock) {
 	//	lock_acquire(core_map_lock);
 	//}
+	bool lock = get_coremap_lock();
 
 	// Double check that the page exists
 	// Double check that page is clean.
@@ -492,7 +492,7 @@ int evict_page(struct page* page)
 
 	// Update the Page Table to list the page as swapped
 	struct page_table *pt = pgdir_walk(page->as,page->va,false);
-	DEBUG(DB_SWAP, "Swapping out VA:%p\n", (void*) page->va);
+	DEBUG(DB_SWAP, "Evicting out VA:%p at Page: %d\n", (void*) page->va, page->pa / PAGE_SIZE);
 	// DEBUG(DB_SWAP, "PT:%p\n", pt);
 	int pt_index = VA_TO_PT_INDEX(page->va);
 	// DEBUG(DB_SWAP, "PT Index: %d\n",pt_index);
@@ -509,9 +509,10 @@ int evict_page(struct page* page)
 
 	vaddr_t page_location = PADDR_TO_KVADDR(page->pa);
 	free_kpages(page_location);
-
+	KASSERT(page->state == FREE);
 	// Unlock core map
 	//lock_release(core_map_lock);
+	release_coremap_lock(lock);
 
 	return result;
 
@@ -524,6 +525,9 @@ int swapout_page(struct page* page)
 
 	int result = 0;
 	int swap_index;
+
+	bool lock = get_coremap_lock();
+	DEBUG(DB_SWAP, "Swapping out VA:%p at Page: %d\n", (void*) page->va, page->pa / PAGE_SIZE);
 
 	// check coremap lock do i have?
 	//lock coremap
@@ -591,6 +595,7 @@ int swapout_page(struct page* page)
 
 	// release coremap lock
 	//lock_release(core_map_lock);
+	release_coremap_lock(lock);
 
 	return result;
 }
@@ -610,6 +615,7 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 
 	// check coremap do i have?
 	// lock cremap
+	bool lock = get_coremap_lock();
 
 	// double check that page exists
 	// double check that page is swappe
@@ -666,6 +672,7 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 	pt->table[pt_index] &= 0xFFFFFF0F;
 
 	//release coremap lock
+	release_coremap_lock(lock);
 
 	return result;
 }
