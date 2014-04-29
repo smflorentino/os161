@@ -489,10 +489,18 @@ int evict_page(struct page* page)
 
 	// Update the Page Table to list the page as swapped
 	struct page_table *pt = pgdir_walk(page->as,page->va,false);
+	DEBUG(DB_SWAP, "Swapping out VA:%p\n", (void*) page->va);
+	// DEBUG(DB_SWAP, "PT:%p\n", pt);
 	int pt_index = VA_TO_PT_INDEX(page->va);
-	pt->table[pt_index] |= PTE_SWAP;		 // Flips the bit to indicate swapped
-	KASSERT(pt->table[pt_index] & PTE_SWAP); // Check that the bit was set correctly.
-
+	// DEBUG(DB_SWAP, "PT Index: %d\n",pt_index);
+	int* pte = &(pt->table[pt_index]);
+	KASSERT(PTE_TO_LOCATION(*pte) == PTE_PM); //Check we're evicting from memory
+	// DEBUG(DB_SWAP, "PTE Location: %p\n", pte);
+	// DEBUG(DB_SWAP, "PTE Before: %p\n", (void*) *pte);
+	*pte |= PTE_SWAP;		 // Flips the bit to indicate swapped
+	pte = &(pt->table[pt_index]);	
+	KASSERT(PTE_TO_LOCATION(*pte) == PTE_SWAP); // Check that the bit was set correctly.
+	// DEBUG(DB_SWAP, "PTE After: %p\n", (void*) *pte);
 	// Update the coremap to list the physical page as free
 	//free_kpages(page->va);
 
@@ -589,7 +597,7 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 {
 
 	// Check for free space in memory (finding the free space is the swap alg's job)
-	KASSERT(page->as == NULL);
+	// KASSERT(page->as == NULL);
 	KASSERT(as != NULL);
 
 	volatile int result = 0;	// Incase we want to pass infor back up.
@@ -601,10 +609,16 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 	// lock cremap
 
 	// double check that page exists
-	// double check that page is swapped
+	// double check that page is swappe
+	DEBUG(DB_SWAP, "Swapping in VA:%p\n", (void*) va);
 	struct page_table *pt = pgdir_walk(as,va,false);
+	// DEBUG(DB_SWAP, "PT:%p\n ", pt);
 	int pt_index = VA_TO_PT_INDEX(va);
-	KASSERT(pt->table[pt_index] & PTE_SWAP); // Check that the page is swapped.
+	// DEBUG(DB_SWAP, "PT Index: %d\n",pt_index);
+	int pte = pt->table[pt_index];
+	// DEBUG(DB_SWAP, "PTE to Swap in: %p\n", (void*) pte);
+	// DEBUG(DB_SWAP, "PTE Location: %p\n", &(pt->table[pt_index]));
+	KASSERT(PTE_TO_LOCATION(pte) == PTE_SWAP); // Check that the page is swapped.
 
 	// lock the swap table
 
@@ -644,6 +658,8 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 
 	// mark page as DIRTY
 	page->state = DIRTY;
+	// mark page as in memory TODO macro
+	pt->table[pt_index] &= 0xFFFFFF0F;
 
 	//release coremap lock
 

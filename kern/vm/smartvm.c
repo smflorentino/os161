@@ -83,23 +83,25 @@ size_t
 get_a_dirty_page_index()
 {
 	//Some shenanigans here. This will be preserved throughout the life of the program. 
-	static size_t current_index = 0;
-
-	//Once we hit the end of RAM, go back to the start.
-	if(current_index == page_count)
-	{
-		current_index = 0;
-	}
+	static volatile size_t current_index = 0;
+	bool lock = get_coremap_lock();
+	// DEBUG(DB_SWAP,"DPI: %d\n", current_index);
 	for(size_t i = current_index; i<page_count; i++)
 	{
-		current_index++;
 		if(core_map[i].state == DIRTY)
 		{
 			//Since we increment before the if statement (for next time)
 			//Subtract one and then return.
-			return current_index-1;
+			current_index = i+1;
+			release_coremap_lock(lock);
+			return i;
 		}
 	}
+	//Reached end of core map. Start from beginning.
+	current_index = 0;
+	release_coremap_lock(lock);
+	return get_a_dirty_page_index();
+
 
 	panic("Get dirty page index is broken!");
 	return -1;
@@ -116,10 +118,15 @@ void
 make_page_available()
 {
 	bool lock = get_coremap_lock();
+	DEBUG(DB_SWAP, "Free Pages: %d\n",free_pages);	
 	if(free_pages <= 10) {
+		DEBUG(DB_SWAP, "Start Swap: %d\n",free_pages);	
 		size_t rr_page = get_a_dirty_page_index();
+		DEBUG(DB_SWAP, "Starting Swapout... %d\n",rr_page);
 		swapout_page(&core_map[rr_page]);
+		DEBUG(DB_SWAP, "Starting Eviction...%d\n",rr_page);
 		evict_page(&core_map[rr_page]);
+		DEBUG(DB_SWAP, "Evicted %d\n",rr_page);
 	}
 
 	release_coremap_lock(lock);
@@ -258,15 +265,20 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	pt = pgdir_walk(as,faultaddress,false);
 	pt_index = VA_TO_PT_INDEX(faultaddress);
 	pfn = PTE_TO_PFN(pt->table[pt_index]);
-	// DEBUG(DB_VM,"PTE:%p\n",(void*) pt->table[pt_index]);
+	
 	permissions = PTE_TO_PERMISSIONS(pt->table[pt_index]);
 	swapped = PTE_TO_LOCATION(pt->table[pt_index]);
 	/* If we're swapped out, time to do some extra stuff. */
 	if(swapped)
 	{
+
 		//TODO get the page back in to ram. 
 		//Does this work?
+		// DEBUG(DB_SWAP,"PTE (vmfault)1:%p\n",(void*) pt->table[pt_index]);
 		struct page *page = page_alloc(as,faultaddress,permissions);
+		/* Page now has a home in RAM. But set the swap bit to 1 so we can swap the page in*/
+		pt->table[pt_index] |= PTE_SWAP;
+		// DEBUG(DB_SWAP,"PTE (vmfault)2:%p\n",(void*) pt->table[pt_index]);
 		swapin_page(as,faultaddress,page);
 	}
 	// DEBUG(DB_VM, "PTERWX:%d\n",permissions);
@@ -509,7 +521,7 @@ static
 vaddr_t
 page_nalloc(int npages)
 {
-	spinlock_acquire(&stealmem_lock);
+	bool lock = get_coremap_lock();
 
 	bool blockStarted = false;
 	int pagesFound = 0;
@@ -539,12 +551,10 @@ page_nalloc(int npages)
 				allocate_fixed_page(j);
 			}
 			core_map[startingPage].npages = npages;
-			spinlock_release(&stealmem_lock);
+			release_coremap_lock(lock);
 			return PADDR_TO_KVADDR(core_map[startingPage].pa);
 		}
 	}
-	spinlock_release(&stealmem_lock);
-	//TODO swap
 	panic("Couldn't find a big enough chunk for npages!");
 	return 0x0;	
 }

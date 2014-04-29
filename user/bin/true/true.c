@@ -41,16 +41,11 @@ main(int argc, char* argv[])
 {
 	(void)argc;
 	(void)argv;
-	void *x;
-	printf("Hello World 50q000\n");
-	printf("Hello World 50q000\n");
-	while(1){
-		x = malloc(4000);
+	printf("Main");
+	for(int i =0;i<3000;i++)
+	{
+		printf("I:%d\n",i);
+		malloc(1024);
 	}
-	//x = malloc(10);
-	//printf("x = %d\n", (int)x);
-	//x = x + 1;
-	printf("Hello World 2\n");
-
 	exit(0);
 }
