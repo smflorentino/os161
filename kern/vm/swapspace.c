@@ -375,7 +375,10 @@ int swapspace_init(void)
 		swap_table[i].as = NULL;
 	}
 
+	// struct page *page = page_alloc(0x0,0x0,0);
+	// page->state = DIRTY;
 
+	
 	// Testing file disk writes
 	// int buff1[1024];
 	// int buff2[1024];

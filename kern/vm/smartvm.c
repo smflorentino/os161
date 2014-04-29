@@ -280,6 +280,10 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		pt->table[pt_index] |= PTE_SWAP;
 		// DEBUG(DB_SWAP,"PTE (vmfault)2:%p\n",(void*) pt->table[pt_index]);
 		swapin_page(as,faultaddress,page);
+		/* Page was swapped back in. Re-translate */
+		pt = pgdir_walk(as,faultaddress,false);
+		pt_index = VA_TO_PT_INDEX(faultaddress);
+		pfn = PTE_TO_PFN(pt->table[pt_index]);
 	}
 	// DEBUG(DB_VM, "PTERWX:%d\n",permissions);
 	//Page is writable if permissions say so or if we're ignoring permissions.
