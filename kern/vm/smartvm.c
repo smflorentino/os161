@@ -532,8 +532,11 @@ page_nalloc(int npages)
 	int startingPage = 0;
 
 	//Make a page available for allocation, if needed.
-	make_page_available();
-	
+	for(int i=0;i<npages;i++)
+	{
+		make_page_available();
+	}
+
 	for(size_t i = 0;i<page_count;i++)
 	{
 		if(!blockStarted && core_map[i].state == FREE)
