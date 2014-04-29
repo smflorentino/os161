@@ -378,7 +378,7 @@ int swapspace_init(void)
 	// struct page *page = page_alloc(0x0,0x0,0);
 	// page->state = DIRTY;
 
-	
+
 	// Testing file disk writes
 	// int buff1[1024];
 	// int buff2[1024];
@@ -661,6 +661,7 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 
 	// mark page as DIRTY
 	page->state = DIRTY;
+	page->va = va;
 	// mark page as in memory TODO macro
 	pt->table[pt_index] &= 0xFFFFFF0F;
 

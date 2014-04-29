@@ -25,6 +25,7 @@
 /* Maximum of 1MB of user stack */
 #define VM_STACKPAGES	256
 #define USER_STACK_LIMIT (0x80000000 - (VM_STACKPAGES * PAGE_SIZE)) 
+#define SWAPPING_ENABLED
 
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
@@ -113,6 +114,7 @@ get_a_dirty_page_index()
  * This method will page available IF NEEDED - i.e. if there are less than 10 free
  * pages on the system, we'll start swapping. If not, we simply return.
  */
+ #ifdef SWAPPING_ENABLED
 static
 void
 make_page_available()
@@ -131,6 +133,7 @@ make_page_available()
 
 	release_coremap_lock(lock);
 }
+#endif
 
 /* Initialization function */
 void vm_bootstrap() 
@@ -493,8 +496,10 @@ page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 {
 	bool lock = get_coremap_lock();
 
+	#ifdef SWAPPING_ENABLED
 	//Make a page available for allocation, if needed.
 	make_page_available();
+	#endif
 
 	for(size_t i = 0;i<page_count;i++)
 	{
@@ -533,11 +538,13 @@ page_nalloc(int npages)
 	int pagesFound = 0;
 	int startingPage = 0;
 
+	#ifdef SWAPPING_ENABLED
 	//Make a page available for allocation, if needed.
 	for(int i=0;i<npages;i++)
 	{
 		make_page_available();
 	}
+	#endif
 
 	for(size_t i = 0;i<page_count;i++)
 	{
