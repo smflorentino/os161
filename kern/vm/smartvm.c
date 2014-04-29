@@ -205,6 +205,7 @@ void vm_bootstrap()
 //TODO permissions.
 int vm_fault(int faulttype, vaddr_t faultaddress) 
 {
+	// bool lock = get_coremap_lock();
 	// DEBUG(DB_VM,"F:%p\n",(void*) faultaddress);
 	struct addrspace *as = curthread->t_addrspace;
 	//We ALWAYS update TLB with writable bits ASAP. So this means a fault.
@@ -235,7 +236,6 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	
 	//Translate....
 	struct page_table *pt = pgdir_walk(as,faultaddress,false);
-	KASSERT(pt != NULL);
 	int pt_index = VA_TO_PT_INDEX(faultaddress);
 	int pfn = PTE_TO_PFN(pt->table[pt_index]);
 	int permissions = PTE_TO_PERMISSIONS(pt->table[pt_index]);
@@ -313,6 +313,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		// DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, pfn);
 		tlb_write(ehi, elo, i);
 		splx(spl);
+		// release_coremap_lock(lock);
 		return 0;
 	}
 	/*If we get here, TLB was full. Kill an entry, round robin style*/
@@ -330,6 +331,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		tlb_offering = 0;
 	}
 	splx(spl);
+	// release_coremap_lock(lock);
 	return 0;
 }
 
