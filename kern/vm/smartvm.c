@@ -37,6 +37,8 @@ static size_t page_count;
 static char tlb_offering = 0;
 /* Round-Robin Page to sacrifice >:) */
 static volatile short page_offering = 0;
+//Some shenanigans here. This will be preserved throughout the life of the program. 
+static volatile size_t current_index = 0;
 /* Number of free pages in memory  */
 static size_t free_pages;
 /* TODO figure out how to do this. I'll probably kmalloc it in
@@ -47,6 +49,7 @@ struct lock *core_map_lock = NULL;
  * It's like of modeled like the splhigh/splx methods.
  * Store the result of this method and pass it to 
  * release_coremap_lock when you're done */
+static
 bool
 get_coremap_lock()
 {
@@ -57,6 +60,8 @@ get_coremap_lock()
 	else
 	{
 		spinlock_acquire(&stealmem_lock);
+		KASSERT(spinlock_do_i_hold(&stealmem_lock));
+		DEBUG(DB_SWAP, "\n**GL**\n");
 		return 1;
 	}
 }
@@ -65,11 +70,13 @@ get_coremap_lock()
  * further up the stack. Modeled after splhigh/splx code,
  * see the comments on the above method as well.
  */
+static
 void
 release_coremap_lock(bool release)
 {
 	if(release)
 	{
+		DEBUG(DB_SWAP, "\n**RL**\n");
 		spinlock_release(&stealmem_lock);
 	}
 }
@@ -79,29 +86,40 @@ release_coremap_lock(bool release)
  */
 static 
 size_t
-get_a_dirty_page_index()
+get_a_dirty_page_index(bool single_page)
 {
-	//Some shenanigans here. This will be preserved throughout the life of the program. 
-	static volatile size_t current_index = 0;
-	bool lock = get_coremap_lock();
-	DEBUG(DB_SWAP, "Finding a DPI...\n");
+
+	// bool lock = get_coremap_lock();
+	KASSERT(spinlock_do_i_hold(&stealmem_lock));
+	// DEBUG(DB_SWAP, "Cur:%d\n",current_index);
 	for(size_t i = current_index; i<page_count; i++)
 	{
-		DEBUG(DB_SWAP,"DPI: %d\n", i);
+		KASSERT(spinlock_do_i_hold(&stealmem_lock));
+		// DEBUG(DB_SWAP,"DPI: %d\n", i);
 		if(core_map[i].state == DIRTY)
 		{
 			//Since we increment before the if statement (for next time)
 			//Subtract one and then return.
-			DEBUG(DB_SWAP, "RR Index: %d\n",i);
+			// DEBUG(DB_SWAP, "DPI: %d%d\n",i,core_map[i].state);
 			current_index = i+1;
-			release_coremap_lock(lock);
+			KASSERT(core_map[i].state == DIRTY);
+			if(single_page)
+			{
+				core_map[i].state = SWAPPING;
+			}
+			// release_coremap_lock(lock);
 			return i;
 		}
 	}
 	//Reached end of core map. Start from beginning.
-	current_index = 0;
-	release_coremap_lock(lock);
-	return get_a_dirty_page_index();
+	DEBUG(DB_SWAP,"??%d\n",spinlock_do_i_hold(&stealmem_lock));
+	// DEBUG(DB_SWAP,"??%d\n",spinlock_do_i_hold(&stealmem_lock));
+	// DEBUG(DB_SWAP,"??%d\n",spinlock_do_i_hold(&stealmem_lock));
+	// current_index = 0;
+	// release_coremap_lock(lock);
+	// DEBUG(DB_SWAP,"??%d\n",spinlock_do_i_hold(&stealmem_lock));
+	KASSERT(spinlock_do_i_hold(&stealmem_lock) == true);
+	return get_a_dirty_page_index(single_page);
 
 
 	panic("Get dirty page index is broken!");
@@ -119,20 +137,19 @@ static
 void
 make_page_available()
 {
-	bool lock = get_coremap_lock();
-	DEBUG(DB_SWAP, "Free Pages: %d\n",free_pages);	
+	KASSERT(spinlock_do_i_hold(&stealmem_lock));
+	// DEBUG(DB_SWAP, "Free Pages: %d\n",free_pages);	
 	if(free_pages <= 12) {
-		DEBUG(DB_SWAP, "Making page available\n");
+		// DEBUG(DB_SWAP, "Making page available\n");
 		// DEBUG(DB_SWAP, "Start Swap: %d\n",free_pages);	
-		size_t rr_page = get_a_dirty_page_index();
-		// DEBUG(DB_SWAP, "Starting Swapout... %d\n",rr_page);
+		size_t rr_page = get_a_dirty_page_index(true);
+		KASSERT(core_map[rr_page].state == SWAPPING);
+		DEBUG(DB_SWAP, "SWO %d\n",rr_page);
 		swapout_page(&core_map[rr_page]);
 		// DEBUG(DB_SWAP, "Starting Eviction...%d\n",rr_page);
 		evict_page(&core_map[rr_page]);
 		// DEBUG(DB_SWAP, "Evicted %d\n",rr_page);
 	}
-
-	release_coremap_lock(lock);
 }
 
 /* Called in page_nalloc ONLY at the moment.
@@ -144,9 +161,10 @@ static
 void
 make_pages_available(int npages, bool retry)
 {
-	bool lock = get_coremap_lock();
+	KASSERT(spinlock_do_i_hold(&stealmem_lock));
+	// bool lock = get_coremap_lock();
 	if(free_pages <= 10) {
-		size_t rr_page = get_a_dirty_page_index();
+		size_t rr_page = get_a_dirty_page_index(false);
 		if(retry)
 		{
 			rr_page = 0;
@@ -154,11 +172,11 @@ make_pages_available(int npages, bool retry)
 		bool blockStarted = false;
 		int pagesFound = 0;
 		int startingPage = 0;
-		DEBUG(DB_SWAP, "NPages:%d\n",npages);
-		DEBUG(DB_SWAP, "Page Count:%d\n",page_count);
+		// DEBUG(DB_SWAP, "NPages:%d\n",npages);
+		// DEBUG(DB_SWAP, "Page Count:%d\n",page_count);
 		for(size_t i = rr_page;i < (size_t) page_count;i++)
 		{
-			DEBUG(DB_SWAP, "Page: %d State: %d\n",i,core_map[i].state);
+			// DEBUG(DB_SWAP, "Page: %d State: %d\n",i,core_map[i].state);
 			page_state_t curState = core_map[i].state;
 			if(!blockStarted && (curState == DIRTY || curState == FREE))
 			{
@@ -182,11 +200,13 @@ make_pages_available(int npages, bool retry)
 				{
 					if(core_map[j].state == DIRTY)
 					{
+						core_map[j].state = SWAPPING;
+						DEBUG(DB_SWAP,"SWO%d\n",j);
 						swapout_page(&core_map[j]);
 						evict_page(&core_map[j]);	
 					}
 				}
-				release_coremap_lock(lock);
+				// release_coremap_lock(lock);
 				return;
 			}
 		}
@@ -200,7 +220,7 @@ make_pages_available(int npages, bool retry)
 			make_pages_available(npages,true);
 		}
 	}
-	release_coremap_lock(lock);
+	// release_coremap_lock(lock);
 }
 #endif
 
@@ -518,7 +538,7 @@ static
 void 
 allocate_fixed_page(size_t page_num)
 {
-	// KASSERT(lock_do_i_hold(core_map_lock));
+	KASSERT(spinlock_do_i_hold(&stealmem_lock));
 	core_map[page_num].state = FIXED;
 	paddr_t pa = page_num * PAGE_SIZE;
 	core_map[page_num].pa = pa;
@@ -534,6 +554,7 @@ static
 void
 allocate_nonfixed_page(size_t page_num, struct addrspace *as, vaddr_t va, int permissions)
 {
+	KASSERT(spinlock_do_i_hold(&stealmem_lock));
 	//Allocate a page
 	core_map[page_num].state = DIRTY;
 	paddr_t pa = page_num * PAGE_SIZE;
@@ -586,10 +607,11 @@ struct page *
 page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 {
 	bool lock = get_coremap_lock();
-	DEBUG(DB_SWAP, "Need page for %p\n",(void*) va);
+	// DEBUG(DB_SWAP, "Need page for %p\n",(void*) va);
 	#ifdef SWAPPING_ENABLED
 	//Make a page available for allocation, if needed.
 	make_page_available();
+
 	#endif
 
 	for(size_t i = 0;i<page_count;i++)
@@ -599,13 +621,13 @@ page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 			if(as == NULL)
 			{
 				KASSERT(va == 0x0);
-				DEBUG(DB_SWAP, "Getting page %d for FIXED\n",i);
+				// DEBUG(DB_SWAP, "Getting page %d for FIXED\n",i);
 				allocate_fixed_page(i);				
 			}
 			else
 			{
 				KASSERT(va != 0x0);
-				DEBUG(DB_SWAP, "Getting page %d for %p\n",i, (void*) va);
+				// DEBUG(DB_SWAP, "Getting page %d for %p\n",i, (void*) va);
 				allocate_nonfixed_page(i,as,va,permissions);
 			}
 			core_map[i].npages = 1;
@@ -655,7 +677,7 @@ page_nalloc(int npages)
 		}
 		if(pagesFound == npages)
 		{
-			DEBUG(DB_SWAP, "Getting %d npages %d-%d for FIXED\n",npages,startingPage,startingPage+npages-1);
+			// DEBUG(DB_SWAP, "Getting %d npages %d-%d for FIXED\n",npages,startingPage,startingPage+npages-1);
 
 			//Allocate the block of pages, now.
 			for(int j = startingPage; j<startingPage + npages; j++)
@@ -718,6 +740,7 @@ void free_kpages(vaddr_t addr)
 			// size_t target = i + core_map[i].npages;
 			for(size_t j = i; j<i+core_map[i].npages;j++)
 			{
+				// DEBUG(DB_SWAP, "FREE %p\n",&core_map[j]);
 				free_fixed_page(j);
 			}
 			release_coremap_lock(lock);

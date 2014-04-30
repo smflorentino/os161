@@ -201,7 +201,7 @@ int evict_page(struct page* page)
 	// Double check that the page exists
 	// Double check that page is clean.
 	KASSERT(page->state == CLEAN);
-
+	KASSERT(page->as != NULL);
 	// Shootdown the TLB
 	struct tlbshootdown tlb;
 	tlb.ts_vaddr = page->va;
@@ -219,6 +219,8 @@ int evict_page(struct page* page)
 	vaddr_t page_location = PADDR_TO_KVADDR(page->pa);
 	free_kpages(page_location);
 
+	KASSERT(page->state == CLEAN);
+	KASSERT(page->as == NULL);
 	// Unlock core map
 	//lock_release(core_map_lock);
 
@@ -294,7 +296,7 @@ int swapout_page(struct page* page)
 
 	// sleep until swap to disk completes, so that others can run
 	// grab coremap lock
-
+	KASSERT(page->state == DIRTY);
 	// mark page as CLEAN
 	page->state = CLEAN;
 
@@ -506,7 +508,6 @@ int read_page(int swap_index, paddr_t page)
 int evict_page(struct page* page)
 {
 	//(void)page;
-
 	volatile int result = 0;	// Incase we ever want to pass something back.
 
 	// check coremap do i have?
@@ -515,21 +516,19 @@ int evict_page(struct page* page)
 	//if(!holdlock) {
 	//	lock_acquire(core_map_lock);
 	//}
-	bool lock = get_coremap_lock();
-
+	// bool lock = get_coremap_lock();
+	// DEBUG(DB_SWAP,"Evicting PAGE %p\n", page);
 	// Double check that the page exists
 	// Double check that page is clean.
 	KASSERT(page->state == CLEAN);
+	KASSERT(page->as != NULL);
+	KASSERT(page->va != 0x0);
 
-	// Shootdown the TLB for all CPU's
-	struct tlbshootdown tlb;
-	tlb.ts_vaddr = page->va;
-	ipi_tlbshootdown_broadcast(&tlb);
 	//ipi_broadcast(IPI_TLBSHOOTDOWN);
 
 	// Update the Page Table to list the page as swapped
 	struct page_table *pt = pgdir_walk(page->as,page->va,false);
-	DEBUG(DB_SWAP, "Evicting out VA:%p at Page: %d\n", (void*) page->va, page->pa / PAGE_SIZE);
+	// DEBUG(DB_SWAP, "Evicting out VA:%p at Page: %d\n", (void*) page->va, page->pa / PAGE_SIZE);
 	// DEBUG(DB_SWAP, "PT:%p\n", pt);
 	int pt_index = VA_TO_PT_INDEX(page->va);
 	// DEBUG(DB_SWAP, "PT Index: %d\n",pt_index);
@@ -549,7 +548,7 @@ int evict_page(struct page* page)
 	KASSERT(page->state == FREE);
 	// Unlock core map
 	//lock_release(core_map_lock);
-	release_coremap_lock(lock);
+	// release_coremap_lock(lock);
 
 	return result;
 
@@ -559,13 +558,19 @@ int evict_page(struct page* page)
 	does NOT evict the page. */
 int swapout_page(struct page* page)
 {	
-
+	// DEBUG(DB_SWAP,"SWO%d\n", page->pa/PAGE_SIZE);
+	// bool lock = get_coremap_lock();
+	// Shootdown the TLB for all CPU's
+	struct tlbshootdown tlb;
+	tlb.ts_vaddr = page->va;
+	ipi_tlbshootdown_broadcast(&tlb);
+	KASSERT(page->state == SWAPPING);
+	// DEBUG(DB_SWAP,"Swapping PAGE %p\n", page);
 	int result = 0;
 	int swap_index;
-
-	bool lock = get_coremap_lock();
 	//bool lock2 = get_swap_lock();
-	DEBUG(DB_SWAP, "Swapping out VA:%p at Page: %d\n", (void*) page->va, page->pa / PAGE_SIZE);
+	KASSERT(page->as != NULL);
+	// DEBUG(DB_SWAP, "Swapping out VA:%p at Page: %d\n", (void*) page->va, page->pa / PAGE_SIZE);
 
 	// check coremap lock do i have?
 	//lock coremap
@@ -575,8 +580,8 @@ int swapout_page(struct page* page)
 	//}
 
 	// double check that page exists
-	// double check that page is dirty
-	//KASSERT(page->state == DIRTY);
+	// double check that page is DIRTY
+	// KASSERT(page->state == DIRTY);
 
 	// Only handling singe pages right now
 	KASSERT(page->npages == 1);
@@ -629,11 +634,14 @@ int swapout_page(struct page* page)
 	// grab coremap lock
 
 	// mark page as CLEAN
+	KASSERT(page->state == SWAPPING);
 	page->state = CLEAN;
+	KASSERT(page->as != NULL);
+	KASSERT(page->state == CLEAN);
 
 	// release coremap lock
 	//release_swap_lock(lock2);
-	release_coremap_lock(lock);
+	// release_coremap_lock(lock);
 
 	return result;
 }
@@ -647,17 +655,18 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 	KASSERT(as != NULL);
 
 	volatile int result = 0;	// Incase we want to pass infor back up.
+	(void)result;
 	int swap_index;
 
 
 
 	// check coremap do i have?
-	bool lock = get_coremap_lock();
+	// bool lock = get_coremap_lock();
 	//bool lock2 = get_swap_lock();
 
 	// double check that page exists
 	// double check that page is swappe
-	DEBUG(DB_SWAP, "Swapping in VA:%p\n", (void*) va);
+	DEBUG(DB_SWAP, "SWIVA:%p\n", (void*) va);
 	struct page_table *pt = pgdir_walk(as,va,false);
 	// DEBUG(DB_SWAP, "PT:%p\n ", pt);
 	int pt_index = VA_TO_PT_INDEX(va);
@@ -710,8 +719,8 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 	pt->table[pt_index] &= 0xFFFFFF0F;
 
 	//release coremap lock
-	//release_swap_lock(lock2);
-	release_coremap_lock(lock);
+	// release_swap_lock(lock2);
+	// release_coremap_lock(lock);
 
 	return result;
 }
