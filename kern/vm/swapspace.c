@@ -11,6 +11,7 @@
 #include <vm.h>
 #include <synch.h>
 #include <uio.h>
+#include <cpu.h>
 
 /* Pick swapping implementation below; either swapfile or raw style. Comment out
 	the one to not implement. */
@@ -520,10 +521,11 @@ int evict_page(struct page* page)
 	// Double check that page is clean.
 	KASSERT(page->state == CLEAN);
 
-	// Shootdown the TLB
+	// Shootdown the TLB for all CPU's
 	struct tlbshootdown tlb;
 	tlb.ts_vaddr = page->va;
-	vm_tlbshootdown(&tlb);
+	ipi_tlbshootdown_broadcast(&tlb);
+	//ipi_broadcast(IPI_TLBSHOOTDOWN);
 
 	// Update the Page Table to list the page as swapped
 	struct page_table *pt = pgdir_walk(page->as,page->va,false);
@@ -574,7 +576,7 @@ int swapout_page(struct page* page)
 
 	// double check that page exists
 	// double check that page is dirty
-	KASSERT(page->state == DIRTY);
+	//KASSERT(page->state == DIRTY);
 
 	// Only handling singe pages right now
 	KASSERT(page->npages == 1);
