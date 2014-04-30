@@ -730,12 +730,23 @@ void free_kpages(vaddr_t addr)
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown_all(void)
 {
+	int spl;
+	/* Disable interrupts on this CPU while frobbing the TLB. */
+	spl = splhigh();
+
+	/* Shoot down all the TLB entries. */
+	for (int i = 0; i < NUM_TLB; i++) {
+		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+	}
+
+	splx(spl);
+
 	return;
 }
 
 void vm_tlbshootdown(const struct tlbshootdown *ts)
 {
-	(void)ts;
+	//(void)ts;
 
 	int tlb_entry, spl;
 

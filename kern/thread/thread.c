@@ -1370,6 +1370,39 @@ ipi_tlbshootdown(struct cpu *target, const struct tlbshootdown *mapping)
 	spinlock_release(&target->c_ipi_lock);
 }
 
+/* Given tlbshootdown information, shoot down an entry in all the CPU's as a broadcast. */
+void
+ipi_tlbshootdown_broadcast(const struct tlbshootdown *mapping)
+{
+	int n;
+	unsigned i;
+	struct cpu *c;
+
+	// Loop to cover all CPU's (the broadcast part)
+	for (i=0; i < cpuarray_num(&allcpus); i++) {
+		c = cpuarray_get(&allcpus, i);
+		if (c != curcpu->c_self) {
+			// Specific shoot down (the tlbshootdown part)
+			spinlock_acquire(&c->c_ipi_lock);
+
+			n = c->c_numshootdown;
+			if (n == TLBSHOOTDOWN_MAX) {
+				c->c_numshootdown = TLBSHOOTDOWN_ALL;
+			}
+			else {
+				c->c_shootdown[n] = *mapping;
+				c->c_numshootdown = n+1;
+			}
+
+			c->c_ipi_pending |= (uint32_t)1 << IPI_TLBSHOOTDOWN;
+			mainbus_send_ipi(c);
+
+			spinlock_release(&c->c_ipi_lock);
+		}
+	}
+}
+
+
 void
 interprocessor_interrupt(void)
 {

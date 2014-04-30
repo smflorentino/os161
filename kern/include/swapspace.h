@@ -20,6 +20,10 @@ struct swap_entry {
 	vaddr_t va;
 };
 
+/* Swap lock functions for protecting the swap table structure if needed. */
+bool get_swap_lock(void);
+void release_swap_lock(bool release);
+
 /* Initialize the hdd for page swapping. Hdd selected in swapspace.c */
 int swapspace_init(void);
 

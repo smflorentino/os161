@@ -24,6 +24,35 @@ static struct vnode* swapspace;
 // Locate the page by comparing the page structure.
 static struct swap_entry swap_table[SWAP_MAX];
 
+static struct lock *swap_lock = NULL;
+
+
+/* Routines to aquire and release the swap lock, same as how the coremap
+	lock is aquired and released. */
+bool
+get_swap_lock(void)
+{
+	if(lock_do_i_hold(swap_lock))
+	{
+		return 0;
+	}
+	else
+	{
+		lock_acquire(swap_lock);
+		return 1;
+	}
+}
+
+
+void
+release_swap_lock(bool release)
+{
+	if(release)
+	{
+		lock_release(swap_lock);
+	}
+}
+
 /***********************************************************************************
 ************************************************************************************
 ***********************************************************************************/
@@ -62,6 +91,8 @@ int swapspace_init(void)
 		//swap_table[i]->page = NULL;
 		swap_table[i].as = NULL;
 	}
+
+
 
 /*
 	// Testing raw disk writes
@@ -374,6 +405,10 @@ int swapspace_init(void)
 		//swap_table[i]->page = NULL;
 		swap_table[i].as = NULL;
 	}
+
+	// Need the swap lock from now on to protect the swap table.
+	swap_lock = lock_create("swap_lock");
+
 	// struct page *page = page_alloc(0x0,0x0,0);
 	// page->state = DIRTY;
 
@@ -527,6 +562,7 @@ int swapout_page(struct page* page)
 	int swap_index;
 
 	bool lock = get_coremap_lock();
+	//bool lock2 = get_swap_lock();
 	DEBUG(DB_SWAP, "Swapping out VA:%p at Page: %d\n", (void*) page->va, page->pa / PAGE_SIZE);
 
 	// check coremap lock do i have?
@@ -594,7 +630,7 @@ int swapout_page(struct page* page)
 	page->state = CLEAN;
 
 	// release coremap lock
-	//lock_release(core_map_lock);
+	//release_swap_lock(lock2);
 	release_coremap_lock(lock);
 
 	return result;
@@ -614,8 +650,8 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 
 
 	// check coremap do i have?
-	// lock cremap
 	bool lock = get_coremap_lock();
+	//bool lock2 = get_swap_lock();
 
 	// double check that page exists
 	// double check that page is swappe
@@ -672,6 +708,7 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 	pt->table[pt_index] &= 0xFFFFFF0F;
 
 	//release coremap lock
+	//release_swap_lock(lock2);
 	release_coremap_lock(lock);
 
 	return result;
