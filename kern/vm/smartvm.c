@@ -667,6 +667,7 @@ page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 	{
 		if(core_map[i].state == FREE)
 		{
+			int spl = splhigh();
 			if(as == NULL)
 			{
 				KASSERT(va == 0x0);
@@ -680,6 +681,7 @@ page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 				allocate_nonfixed_page(i,as,va,permissions);
 			}
 			core_map[i].npages = 1;
+			splx(spl);
 			release_coremap_lock(lock);
 			return &core_map[i];
 		}
