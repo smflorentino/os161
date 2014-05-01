@@ -157,6 +157,7 @@ as_destroy(struct addrspace *as)
 					if(swapped)
 					{
 						//TODO remove page from swap file
+						kprintf("Cleaning a swap page.\n");
 						vaddr_t va = PD_INDEX_TO_VA(i) | PT_INDEX_TO_VA(j);
 						clean_swapfile(as, va);
 						continue;

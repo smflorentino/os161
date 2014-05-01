@@ -410,7 +410,7 @@ int swapspace_init(void)
 	}
 
 	// Need the swap lock from now on to protect the swap table.
-	// swap_lock = lock_create("swap_lock");
+	swap_lock = lock_create("swap_lock");
 
 	// struct addrspace *as = as_create();
 	// struct page *page = page_alloc(as,0x500000,PF_RW);
