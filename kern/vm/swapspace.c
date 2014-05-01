@@ -588,6 +588,16 @@ int swapout_page(struct page* page)
 	int swap_index;
 	//bool lock2 = get_swap_lock();
 	KASSERT(page->as != NULL);
+
+	// Update the Page Table to list the page as swapped
+	struct page_table *pt = pgdir_walk(page->as,page->va,false);
+	// DEBUG(DB_SWAP, "Evicting out VA:%p at Page: %d\n", (void*) page->va, page->pa / PAGE_SIZE);
+	// DEBUG(DB_SWAP, "PT:%p\n", pt);
+	int pt_index = VA_TO_PT_INDEX(page->va);
+	// DEBUG(DB_SWAP, "PT Index: %d\n",pt_index);
+	int* pte = &(pt->table[pt_index]);
+	DEBUG(DB_SWAP, "PTE:%p\n",(void*) *pte);
+	KASSERT(PTE_TO_LOCATION(*pte) == PTE_SWAPPING); //Check we're evicting from memory
 	// DEBUG(DB_SWAP, "Swapping out VA:%p at Page: %d\n", (void*) page->va, page->pa / PAGE_SIZE);
 
 	// check coremap lock do i have?

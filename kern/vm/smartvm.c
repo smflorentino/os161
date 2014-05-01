@@ -402,9 +402,9 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	permissions = PTE_TO_PERMISSIONS(pt->table[pt_index]);
 	swapped = PTE_TO_LOCATION(pt->table[pt_index]);
 	/* If we're swapped out, time to do some extra stuff. */
-	if(swapped == PTE_SWAPPING)
+	while(swapped == PTE_SWAPPING)
 	{
-		panic("asd");
+		thread_yield();
 	}
 	if(swapped == PTE_SWAP)
 	{
@@ -503,9 +503,17 @@ pgdir_walk(struct addrspace *as, vaddr_t va, bool create)
 struct page *
 get_page(int pdi, int pti, int pte)
 {
-	bool swapped = PTE_TO_LOCATION(pte);
+	int swapped = PTE_TO_LOCATION(pte);
 	bool lock = get_coremap_lock();
-	if(swapped)
+	while(swapped == PTE_SWAPPING)
+	{
+		thread_yield();
+	}
+	if(swapped == PTE_SWAPPING)
+	{
+		panic("BOB SAGGOT");
+	}
+	if(swapped == PTE_SWAP)
 	{
 		//Get the address space, virtual address, and permissions from PTE.
 		struct addrspace *as = curthread->t_addrspace;
