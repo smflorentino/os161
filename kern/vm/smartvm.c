@@ -215,6 +215,7 @@ make_pages_available(int npages, bool retry)
 						core_map[j].state = SWAPPINGOUT;
 					}
 				}
+				current_index = startingPage + npages + 1;
 				splx(spl);
 				//Swap out the block of pages, now
 				for(int j = startingPage; j<startingPage + npages; j++)
