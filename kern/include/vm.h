@@ -49,7 +49,8 @@
  	CLEAN,
  	DIRTY,
  	FIXED,
- 	SWAPPING
+ 	SWAPPINGIN,
+ 	SWAPPINGOUT
  } page_state_t;
 
  struct page {
@@ -90,8 +91,9 @@ struct page * get_page(int pdi,int pti,int pte);
 void copy_page(struct page *src, struct page *dst);
 
 /* Functions to get core map lock*/
-// bool get_coremap_lock(void);
-// void release_coremap_lock(bool);
+bool get_coremap_lock(void);
+void release_coremap_lock(bool);
+bool coremap_lock_do_i_hold(void);
 
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown_all(void);

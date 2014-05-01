@@ -39,6 +39,7 @@ static char tlb_offering = 0;
 static volatile short page_offering = 0;
 //Some shenanigans here. This will be preserved throughout the life of the program. 
 static volatile size_t current_index = 0;
+static volatile size_t current_n_index = 0;
 /* Number of free pages in memory  */
 static size_t free_pages;
 /* TODO figure out how to do this. I'll probably kmalloc it in
@@ -49,7 +50,6 @@ struct lock *core_map_lock = NULL;
  * It's like of modeled like the splhigh/splx methods.
  * Store the result of this method and pass it to 
  * release_coremap_lock when you're done */
-static
 bool
 get_coremap_lock()
 {
@@ -70,7 +70,6 @@ get_coremap_lock()
  * further up the stack. Modeled after splhigh/splx code,
  * see the comments on the above method as well.
  */
-static
 void
 release_coremap_lock(bool release)
 {
@@ -80,13 +79,19 @@ release_coremap_lock(bool release)
 		spinlock_release(&stealmem_lock);
 	}
 }
+
+bool
+coremap_lock_do_i_hold()
+{
+	return spinlock_do_i_hold(&stealmem_lock);
+}
 /* Returns the next available index of a page we're going to page to disk. 
  * We do this round robin style at the moment, but I suppose we could change to
  * random at a later time, or even LRU with some tweaks to this method.
  */
 static 
 size_t
-get_a_dirty_page_index(bool single_page)
+get_a_dirty_page_index(bool retry)
 {
 
 	// bool lock = get_coremap_lock();
@@ -96,30 +101,31 @@ get_a_dirty_page_index(bool single_page)
 	{
 		KASSERT(spinlock_do_i_hold(&stealmem_lock));
 		// DEBUG(DB_SWAP,"DPI: %d\n", i);
+		int spl = splhigh();
 		if(core_map[i].state == DIRTY)
 		{
-			//Since we increment before the if statement (for next time)
-			//Subtract one and then return.
-			// DEBUG(DB_SWAP, "DPI: %d%d\n",i,core_map[i].state);
 			current_index = i+1;
-			KASSERT(core_map[i].state == DIRTY);
-			if(single_page)
-			{
-				core_map[i].state = SWAPPING;
-			}
-			// release_coremap_lock(lock);
+			core_map[i].state = SWAPPINGOUT;
+			splx(spl);
+			struct thread *thread = curthread;
+			(void)thread;
+			DEBUG(DB_SWAP, "DPI: %d%d\n",i,core_map[i].state);
+			KASSERT(spinlock_do_i_hold(&stealmem_lock));
+			KASSERT(core_map[i].state == SWAPPINGOUT);
 			return i;
 		}
+		splx(spl);
+	}
+	if(retry)
+	{
+		panic("Couldn't find a dirty page!");
 	}
 	//Reached end of core map. Start from beginning.
-	DEBUG(DB_SWAP,"??%d\n",spinlock_do_i_hold(&stealmem_lock));
-	// DEBUG(DB_SWAP,"??%d\n",spinlock_do_i_hold(&stealmem_lock));
-	// DEBUG(DB_SWAP,"??%d\n",spinlock_do_i_hold(&stealmem_lock));
-	// current_index = 0;
+	current_index = 0;
 	// release_coremap_lock(lock);
 	// DEBUG(DB_SWAP,"??%d\n",spinlock_do_i_hold(&stealmem_lock));
 	KASSERT(spinlock_do_i_hold(&stealmem_lock) == true);
-	return get_a_dirty_page_index(single_page);
+	return get_a_dirty_page_index(true);
 
 
 	panic("Get dirty page index is broken!");
@@ -142,20 +148,23 @@ make_page_available()
 	if(free_pages <= 12) {
 		// DEBUG(DB_SWAP, "Making page available\n");
 		// DEBUG(DB_SWAP, "Start Swap: %d\n",free_pages);	
-		size_t rr_page = get_a_dirty_page_index(true);
-		KASSERT(core_map[rr_page].state == SWAPPING);
-		DEBUG(DB_SWAP, "SWO %d\n",rr_page);
+		size_t rr_page = get_a_dirty_page_index(false);
+		KASSERT(spinlock_do_i_hold(&stealmem_lock));
+		KASSERT(core_map[rr_page].state == SWAPPINGOUT);
+		DEBUG(DB_SWAP, "SWOs%d\n",rr_page);
 		swapout_page(&core_map[rr_page]);
+		KASSERT(spinlock_do_i_hold(&stealmem_lock));
 		// DEBUG(DB_SWAP, "Starting Eviction...%d\n",rr_page);
 		evict_page(&core_map[rr_page]);
+		KASSERT(spinlock_do_i_hold(&stealmem_lock));
 		// DEBUG(DB_SWAP, "Evicted %d\n",rr_page);
 	}
+	KASSERT(spinlock_do_i_hold(&stealmem_lock));
 }
 
 /* Called in page_nalloc ONLY at the moment.
  * This method will page available IF NEEDED - i.e. if there are less than 10 free
  * pages on the system, we'll start swapping. If not, we simply return. 
- * 
  */
 static
 void
@@ -163,8 +172,11 @@ make_pages_available(int npages, bool retry)
 {
 	KASSERT(spinlock_do_i_hold(&stealmem_lock));
 	// bool lock = get_coremap_lock();
+	DEBUG(DB_SWAP,"MPA:%d\n",npages);
 	if(free_pages <= 10) {
-		size_t rr_page = get_a_dirty_page_index(false);
+		//Disable interrupts until we find the right number of pages.
+		int spl = splhigh();
+		size_t rr_page = current_n_index;
 		if(retry)
 		{
 			rr_page = 0;
@@ -195,16 +207,22 @@ make_pages_available(int npages, bool retry)
 			}
 			if(pagesFound == npages)
 			{
-				//Swap out the block of pages, now
+				//Mark the pages as SWAPPING OUT.
 				for(int j = startingPage; j<startingPage + npages; j++)
 				{
 					if(core_map[j].state == DIRTY)
 					{
-						core_map[j].state = SWAPPING;
-						DEBUG(DB_SWAP,"SWO%d\n",j);
-						swapout_page(&core_map[j]);
-						evict_page(&core_map[j]);	
+						core_map[j].state = SWAPPINGOUT;
 					}
+				}
+				splx(spl);
+				//Swap out the block of pages, now
+				for(int j = startingPage; j<startingPage + npages; j++)
+				{
+					KASSERT(core_map[j].state == SWAPPINGOUT);
+					DEBUG(DB_SWAP,"SWOn%d-%d\n",j,npages);
+					swapout_page(&core_map[j]);
+					evict_page(&core_map[j]);	
 				}
 				// release_coremap_lock(lock);
 				return;
@@ -217,6 +235,7 @@ make_pages_available(int npages, bool retry)
 		}
 		else
 		{
+			splx(spl);
 			make_pages_available(npages,true);
 		}
 	}
@@ -290,7 +309,9 @@ void vm_bootstrap()
 	should behave accordingly now*/
 	vm_initialized = true;
 	/* Now that the VM is initialized, create a lock */
-	core_map_lock = lock_create("coremap lock");
+	spinlock_cleanup(&stealmem_lock);
+	spinlock_init(&stealmem_lock);
+	// core_map_lock = lock_create("coremap lock");
 }
 
 /* Fault handling function called by trap code */
@@ -308,7 +329,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	}
 	//Null Pointer
 	if(faultaddress == 0x0)
-	{
+	{	
 		return EFAULT;
 	}
 	//Align the fault address to a page (4k) boundary.
@@ -363,7 +384,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	/* If we're swapped out, time to do some extra stuff. */
 	if(swapped)
 	{
-
+		bool lock = get_coremap_lock();
 		//TODO get the page back in to ram. 
 		//Does this work?
 		// DEBUG(DB_SWAP,"PTE (vmfault)1:%p\n",(void*) pt->table[pt_index]);
@@ -376,6 +397,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		pt = pgdir_walk(as,faultaddress,false);
 		pt_index = VA_TO_PT_INDEX(faultaddress);
 		pfn = PTE_TO_PFN(pt->table[pt_index]);
+		release_coremap_lock(lock);
 	}
 	// DEBUG(DB_VM, "PTERWX:%d\n",permissions);
 	//Page is writable if permissions say so or if we're ignoring permissions.
@@ -458,13 +480,14 @@ struct page *
 get_page(int pdi, int pti, int pte)
 {
 	bool swapped = PTE_TO_LOCATION(pte);
+	bool lock = get_coremap_lock();
 	if(swapped)
 	{
 		//Get the address space, virtual address, and permissions from PTE.
 		struct addrspace *as = curthread->t_addrspace;
 		vaddr_t va = PD_INDEX_TO_VA(pdi) | PT_INDEX_TO_VA(pti);
 		int permissions = PTE_TO_PERMISSIONS(pte);
-
+		KASSERT(coremap_lock_do_i_hold());
 		//Allocate a page
 		struct page *page = page_alloc(as,va,permissions);
 		struct page_table *pt = pgdir_walk(as,va,false);
@@ -478,6 +501,7 @@ get_page(int pdi, int pti, int pte)
 		pte = pt->table[pti];
 
 	}
+	release_coremap_lock(lock);
 	pte = pte / PAGE_SIZE;
 	return &core_map[pte];
 }
@@ -607,11 +631,12 @@ struct page *
 page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 {
 	bool lock = get_coremap_lock();
+	KASSERT(spinlock_do_i_hold(&stealmem_lock));
 	// DEBUG(DB_SWAP, "Need page for %p\n",(void*) va);
 	#ifdef SWAPPING_ENABLED
 	//Make a page available for allocation, if needed.
 	make_page_available();
-
+	KASSERT(spinlock_do_i_hold(&stealmem_lock));
 	#endif
 
 	for(size_t i = 0;i<page_count;i++)
@@ -648,7 +673,7 @@ vaddr_t
 page_nalloc(int npages)
 {
 	bool lock = get_coremap_lock();
-
+	KASSERT(spinlock_do_i_hold(&stealmem_lock));
 	bool blockStarted = false;
 	int pagesFound = 0;
 	int startingPage = 0;
@@ -678,7 +703,7 @@ page_nalloc(int npages)
 		if(pagesFound == npages)
 		{
 			// DEBUG(DB_SWAP, "Getting %d npages %d-%d for FIXED\n",npages,startingPage,startingPage+npages-1);
-
+			KASSERT(spinlock_do_i_hold(&stealmem_lock));
 			//Allocate the block of pages, now.
 			for(int j = startingPage; j<startingPage + npages; j++)
 			{

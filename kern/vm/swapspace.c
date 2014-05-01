@@ -12,6 +12,8 @@
 #include <synch.h>
 #include <uio.h>
 #include <cpu.h>
+#include <addrspace.h>
+#include <elf.h>
 
 /* Pick swapping implementation below; either swapfile or raw style. Comment out
 	the one to not implement. */
@@ -92,8 +94,6 @@ int swapspace_init(void)
 		//swap_table[i]->page = NULL;
 		swap_table[i].as = NULL;
 	}
-
-
 
 /*
 	// Testing raw disk writes
@@ -410,7 +410,17 @@ int swapspace_init(void)
 	}
 
 	// Need the swap lock from now on to protect the swap table.
-	swap_lock = lock_create("swap_lock");
+	// swap_lock = lock_create("swap_lock");
+
+	// struct addrspace *as = as_create();
+	// struct page *page = page_alloc(as,0x500000,PF_RW);
+
+	// page->state = SWAPPING;
+
+	// swapout_page(page);
+	// evict_page(page);
+	// swapin_page(as,0x500000,page);
+	kprintf("Swap Test Done.");
 
 	// struct page *page = page_alloc(0x0,0x0,0);
 	// page->state = DIRTY;
@@ -465,6 +475,9 @@ int write_page(int swap_index, paddr_t page)
 {
 	//(void)swap_index;
 	//(void)page;
+	struct thread *thread = curthread;
+	(void)thread;
+	KASSERT(coremap_lock_do_i_hold());
 	page = PADDR_TO_KVADDR(page);
 	int result = 0;
 
@@ -474,19 +487,22 @@ int write_page(int swap_index, paddr_t page)
 	off_t pos = SIND_TO_DISK(swap_index);
 
 	uio_kinit(&iov, &page_write_uio, (void*)page, PAGE_SIZE, pos, UIO_WRITE);
+	KASSERT(coremap_lock_do_i_hold());
 	result = VOP_WRITE(swapspace, &page_write_uio);
-
+	KASSERT(coremap_lock_do_i_hold());
 	// Need to wait for write to finish?
 
 	return result;
 }
-
 /* SWAPFILE VERSION: Contains uio setup and execution for reading page from disk file. */
 static
 int read_page(int swap_index, paddr_t page)
 {
 	//(void)swap_index;
 	//(void)page;
+	struct thread *thread = curthread;
+	(void)thread;
+	KASSERT(coremap_lock_do_i_hold());
 	page = PADDR_TO_KVADDR(page);
 	int result = 0;
 
@@ -497,7 +513,7 @@ int read_page(int swap_index, paddr_t page)
 
 	uio_kinit(&iov, &page_read_uio, (void*)page, PAGE_SIZE, pos, UIO_READ);
 	result = VOP_READ(swapspace, &page_read_uio);
-
+	KASSERT(coremap_lock_do_i_hold());
 	// Need to wait for read to finish?
 
 	return result;
@@ -561,10 +577,11 @@ int swapout_page(struct page* page)
 	// DEBUG(DB_SWAP,"SWO%d\n", page->pa/PAGE_SIZE);
 	// bool lock = get_coremap_lock();
 	// Shootdown the TLB for all CPU's
-	struct tlbshootdown tlb;
-	tlb.ts_vaddr = page->va;
-	ipi_tlbshootdown_broadcast(&tlb);
-	KASSERT(page->state == SWAPPING);
+	// struct tlbshootdown tlb;
+	// tlb.ts_vaddr = page->va;
+	// ipi_tlbshootdown_broadcast(&tlb);
+	KASSERT(coremap_lock_do_i_hold());
+	KASSERT(page->state == SWAPPINGOUT);
 	// DEBUG(DB_SWAP,"Swapping PAGE %p\n", page);
 	int result = 0;
 	int swap_index;
@@ -624,7 +641,7 @@ int swapout_page(struct page* page)
 
 	// Write page to disk
 	write_page(swap_index, page->pa);
-
+	DEBUG(DB_SWAP,"WD\n.");
 	// Unlock the swap_lock
 
 	// Unlock core map to sleep
@@ -634,15 +651,14 @@ int swapout_page(struct page* page)
 	// grab coremap lock
 
 	// mark page as CLEAN
-	KASSERT(page->state == SWAPPING);
+	KASSERT(page->state == SWAPPINGOUT);
 	page->state = CLEAN;
 	KASSERT(page->as != NULL);
 	KASSERT(page->state == CLEAN);
-
+	KASSERT(coremap_lock_do_i_hold());
 	// release coremap lock
 	//release_swap_lock(lock2);
 	// release_coremap_lock(lock);
-
 	return result;
 }
 
@@ -650,6 +666,7 @@ int swapout_page(struct page* page)
 int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 {
 
+	KASSERT(coremap_lock_do_i_hold());
 	// Check for free space in memory (finding the free space is the swap alg's job)
 	// KASSERT(page->as == NULL);
 	KASSERT(as != NULL);
@@ -721,7 +738,7 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 	//release coremap lock
 	// release_swap_lock(lock2);
 	// release_coremap_lock(lock);
-
+	KASSERT(coremap_lock_do_i_hold());
 	return result;
 }
 

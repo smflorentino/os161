@@ -100,6 +100,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 				//Page Table Entry exists
 				if(pt_entry != 0x0)
 				{
+					bool lock = get_coremap_lock();
 					//Get page permissions
 					int permissions = PTE_TO_PERMISSIONS(pt_entry);
 					//Locate the old page (swap if in, if needed)
@@ -110,6 +111,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 					vaddr_t old_page_va = PADDR_TO_KVADDR(oldpage->pa);
 					//Copy the data:
 					memcpy((void*) new_page_va, (void*) old_page_va,PAGE_SIZE);
+					release_coremap_lock(lock);
 				}
 				else //No page at Page Table entry 'pte'
 				{
