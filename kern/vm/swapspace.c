@@ -488,8 +488,12 @@ int write_page(int swap_index, paddr_t page)
 
 	uio_kinit(&iov, &page_write_uio, (void*)page, PAGE_SIZE, pos, UIO_WRITE);
 	KASSERT(coremap_lock_do_i_hold());
+	//bool lock = true;
+	//release_coremap_lock(lock);
 	result = VOP_WRITE(swapspace, &page_write_uio);
-	KASSERT(coremap_lock_do_i_hold());
+
+	//lock = get_coremap_lock();
+	//KASSERT(coremap_lock_do_i_hold());
 	// Need to wait for write to finish?
 
 	return result;
@@ -512,8 +516,12 @@ int read_page(int swap_index, paddr_t page)
 	off_t pos = SIND_TO_DISK(swap_index);
 
 	uio_kinit(&iov, &page_read_uio, (void*)page, PAGE_SIZE, pos, UIO_READ);
+	//bool lock = true;
+	//release_coremap_lock(lock);
 	result = VOP_READ(swapspace, &page_read_uio);
-	KASSERT(coremap_lock_do_i_hold());
+	//bool lock = get_coremap_lock();
+	//(void)lock;
+	//KASSERT(coremap_lock_do_i_hold());
 	// Need to wait for read to finish?
 
 	return result;
@@ -752,5 +760,38 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 	return result;
 }
 
+/* Need to invalidate any swapped pages when as_destroy is called. */
+int
+clean_swapfile(struct addrspace* as, vaddr_t va)
+{
+	int result = 0;
+
+	// Modifying the swap table, so lock it.
+	bool lock2 = get_swap_lock();
+
+	// Locate the swapped page in the swap table
+	int swap_index = -1;	// -1 is an invalid index
+	for (int i=0; i < SWAP_MAX; i++) {
+		// AS and VA must both match to identify page.
+		if (swap_table[i].as == as && swap_table[i].va == va) {
+			swap_index = i;
+			break;
+		}
+	}
+
+	if (swap_index == -1) {
+		panic("Tried to clean a swap page that doesn't exist.\n");
+		release_swap_lock(lock2);
+		return result;
+	}
+
+	// All we do is make the swap entry null, same as in swapspace_init(). 
+	kprintf("Cleaning a swap page.\n");
+	swap_table[swap_index].as = NULL;
+
+	release_swap_lock(lock2);
+
+	return result;
+}
 
 #endif

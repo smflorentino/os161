@@ -35,6 +35,7 @@
 #include <mips/tlb.h>
 #include <spl.h>
 #include <elf.h>
+#include <swapspace.h>
 
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
@@ -156,6 +157,8 @@ as_destroy(struct addrspace *as)
 					if(swapped)
 					{
 						//TODO remove page from swap file
+						vaddr_t va = PD_INDEX_TO_VA(i) | PT_INDEX_TO_VA(j);
+						clean_swapfile(as, va);
 						continue;
 					}
 					struct page *page = get_page(i,j,pt_entry);
