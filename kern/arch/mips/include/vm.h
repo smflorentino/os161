@@ -98,6 +98,8 @@
 #define PTE_TO_LOCATION(pte) (pte & 0x00000060)
 #define PTE_PM 			0x00 	// Located in physical memory
 #define PTE_SWAP		0x20 	// Located in swap space
+#define PTE_SWAPPING	0x60    // Page is in progress of swapping
+#define PTE_IN_MEM(pte) (pte & 0xFFFFFF9F) //Returns the pte with bits 5 and 6 cleared
 
 #define PDE_AND_PTE_TO_VA(pde,pte) (pde & pte)
 

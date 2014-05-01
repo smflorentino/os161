@@ -733,7 +733,7 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 	page->state = DIRTY;
 	page->va = va;
 	// mark page as in memory TODO macro
-	pt->table[pt_index] &= 0xFFFFFF0F;
+	pt->table[pt_index] = PTE_IN_MEM(pt->table[pt_index]);
 
 	//release coremap lock
 	// release_swap_lock(lock2);
