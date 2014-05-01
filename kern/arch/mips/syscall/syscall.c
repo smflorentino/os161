@@ -726,7 +726,7 @@ sys_read(int fd, const void* buf, size_t buflen, int* retval)
 	// Return bytes read
 	*retval = buflen - u.uio_resid;
 	if(u.uio_resid != 0) {
-		kprintf("Haven't finished reading\n");
+		//kprintf("Haven't finished reading\n");
 	}
 
 	return 0;

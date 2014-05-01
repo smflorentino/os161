@@ -247,6 +247,7 @@ make_pages_available(int npages, bool retry)
 /* Initialization function */
 void vm_bootstrap() 
 {
+	
 	/* Get the firstaddr and lastaddr of physical memory.
 	It will most definitely be less than actual memory; becuase
 	before the VM bootstraps we have to use getppages (which in turn
@@ -319,6 +320,7 @@ void vm_bootstrap()
 //TODO permissions.
 int vm_fault(int faulttype, vaddr_t faultaddress) 
 {
+	//int spl = splhigh();
 	// bool lock = get_coremap_lock();
 	// DEBUG(DB_VM,"F:%p\n",(void*) faultaddress);
 	struct addrspace *as = curthread->t_addrspace;
@@ -326,11 +328,13 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	if(faulttype == VM_FAULT_READONLY && as->use_permissions)
 	{
 		// DEBUG(DB_VM, "NOT ALLOWED\n");
+		//splx(spl);
 		return EFAULT;
 	}
 	//Null Pointer
 	if(faultaddress == 0x0)
 	{	
+		//splx(spl);
 		return EFAULT;
 	}
 	//Align the fault address to a page (4k) boundary.
@@ -339,12 +343,14 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	//Make sure address is valid
 	if(faultaddress >= 0x80000000)
 	{
+		//splx(spl);
 		return EFAULT;
 	}
 	/*If we're trying to access a region after the end of the heap but 
 	 * before the stack, that's invalid (unless load_elf is running) */
 	if(as->loadelf_done && faultaddress < USER_STACK_LIMIT && faultaddress > as->heap_end)
 	{
+		//splx(spl);
 		return EFAULT;
 	}
 	
@@ -371,6 +377,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		}
 		else
 		{
+			//splx(spl);
 			return EFAULT;
 		}
 	}

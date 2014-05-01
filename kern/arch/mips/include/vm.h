@@ -95,9 +95,9 @@
 
 /* Get the location of the page: 00 = physical memory, 01 = swap space, 11 = being swapped.
    Bit positions are 5 and 6; just above reference. */
-#define PTE_TO_LOCATION(pte) (pte & 0x00000010)
+#define PTE_TO_LOCATION(pte) (pte & 0x00000060)
 #define PTE_PM 			0x00 	// Located in physical memory
-#define PTE_SWAP		0x10 	// Located in swap space
+#define PTE_SWAP		0x20 	// Located in swap space
 
 #define PDE_AND_PTE_TO_VA(pde,pte) (pde & pte)
 
