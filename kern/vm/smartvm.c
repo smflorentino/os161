@@ -61,7 +61,7 @@ get_coremap_lock()
 	{
 		spinlock_acquire(&stealmem_lock);
 		KASSERT(spinlock_do_i_hold(&stealmem_lock));
-		DEBUG(DB_SWAP, "\n**GL**\n");
+		// DEBUG(DB_SWAP, "\n**GL**\n");
 		return 1;
 	}
 }
@@ -75,7 +75,7 @@ release_coremap_lock(bool release)
 {
 	if(release)
 	{
-		DEBUG(DB_SWAP, "\n**RL**\n");
+		// DEBUG(DB_SWAP, "\n**RL**\n");
 		spinlock_release(&stealmem_lock);
 	}
 }
@@ -106,10 +106,16 @@ get_a_dirty_page_index(bool retry)
 		{
 			current_index = i+1;
 			core_map[i].state = SWAPPINGOUT;
+			//Update PTE to state PTE_SWAPPING
+			struct page_table *pt = pgdir_walk(core_map[i].as,core_map[i].va,false);
+			int pt_index = VA_TO_PT_INDEX(core_map[i].va);
+			pt->table[pt_index] |= PTE_SWAPPING;
+			// DEBUG(DB_SWAP, "%d\n",pt->table[pt_index]);
+			//////////////////////////////////
 			splx(spl);
 			struct thread *thread = curthread;
 			(void)thread;
-			DEBUG(DB_SWAP, "DPI: %d%d\n",i,core_map[i].state);
+			// DEBUG(DB_SWAP, "DPI: %d%d\n",i,core_map[i].state);
 			KASSERT(spinlock_do_i_hold(&stealmem_lock));
 			KASSERT(core_map[i].state == SWAPPINGOUT);
 			return i;
@@ -151,7 +157,7 @@ make_page_available()
 		size_t rr_page = get_a_dirty_page_index(false);
 		KASSERT(spinlock_do_i_hold(&stealmem_lock));
 		KASSERT(core_map[rr_page].state == SWAPPINGOUT);
-		DEBUG(DB_SWAP, "SWOs%d\n",rr_page);
+		// DEBUG(DB_SWAP, "SWOs%d\n",rr_page);
 		swapout_page(&core_map[rr_page]);
 		KASSERT(spinlock_do_i_hold(&stealmem_lock));
 		// DEBUG(DB_SWAP, "Starting Eviction...%d\n",rr_page);
@@ -172,7 +178,7 @@ make_pages_available(int npages, bool retry)
 {
 	KASSERT(spinlock_do_i_hold(&stealmem_lock));
 	// bool lock = get_coremap_lock();
-	DEBUG(DB_SWAP,"MPA:%d\n",npages);
+	// DEBUG(DB_SWAP,"MPA:%d\n",npages);
 	if(free_pages <= 10) {
 		//Disable interrupts until we find the right number of pages.
 		int spl = splhigh();
@@ -213,6 +219,12 @@ make_pages_available(int npages, bool retry)
 					if(core_map[j].state == DIRTY)
 					{
 						core_map[j].state = SWAPPINGOUT;
+						//Update PTE to state PTE_SWAPPING
+						struct page_table *pt = pgdir_walk(core_map[j].as,core_map[j].va,false);
+						int pt_index = VA_TO_PT_INDEX(core_map[j].va);
+						pt->table[pt_index] |= PTE_SWAPPING;
+						// DEBUG(DB_SWAP, "%d\n",pt->table[pt_index]);
+						//////////////////////////////////
 					}
 				}
 				current_index = startingPage + npages + 1;
@@ -221,7 +233,7 @@ make_pages_available(int npages, bool retry)
 				for(int j = startingPage; j<startingPage + npages; j++)
 				{
 					KASSERT(core_map[j].state == SWAPPINGOUT);
-					DEBUG(DB_SWAP,"SWOn%d-%d\n",j,npages);
+					// DEBUG(DB_SWAP,"SWOn%d-%d\n",j,npages);
 					swapout_page(&core_map[j]);
 					evict_page(&core_map[j]);	
 				}
@@ -390,7 +402,11 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	permissions = PTE_TO_PERMISSIONS(pt->table[pt_index]);
 	swapped = PTE_TO_LOCATION(pt->table[pt_index]);
 	/* If we're swapped out, time to do some extra stuff. */
-	if(swapped)
+	if(swapped == PTE_SWAPPING)
+	{
+		panic("asd");
+	}
+	if(swapped == PTE_SWAP)
 	{
 		bool lock = get_coremap_lock();
 		//TODO get the page back in to ram. 

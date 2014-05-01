@@ -549,10 +549,11 @@ int evict_page(struct page* page)
 	int pt_index = VA_TO_PT_INDEX(page->va);
 	// DEBUG(DB_SWAP, "PT Index: %d\n",pt_index);
 	int* pte = &(pt->table[pt_index]);
-	KASSERT(PTE_TO_LOCATION(*pte) == PTE_PM); //Check we're evicting from memory
+	DEBUG(DB_SWAP, "PTE:%p\n",(void*) *pte);
+	KASSERT(PTE_TO_LOCATION(*pte) == PTE_SWAPPING); //Check we're evicting from memory
 	// DEBUG(DB_SWAP, "PTE Location: %p\n", pte);
 	// DEBUG(DB_SWAP, "PTE Before: %p\n", (void*) *pte);
-	*pte |= PTE_SWAP;		 // Flips the bit to indicate swapped
+	*pte &= 0xFFFFFFBF;		 // Flips the bit to indicate swapped
 	pte = &(pt->table[pt_index]);	
 	KASSERT(PTE_TO_LOCATION(*pte) == PTE_SWAP); // Check that the bit was set correctly.
 	// DEBUG(DB_SWAP, "PTE After: %p\n", (void*) *pte);
@@ -641,7 +642,6 @@ int swapout_page(struct page* page)
 
 	// Write page to disk
 	write_page(swap_index, page->pa);
-	DEBUG(DB_SWAP,"WD\n.");
 	// Unlock the swap_lock
 
 	// Unlock core map to sleep
@@ -683,7 +683,7 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 
 	// double check that page exists
 	// double check that page is swappe
-	DEBUG(DB_SWAP, "SWIVA:%p\n", (void*) va);
+	// DEBUG(DB_SWAP, "SWIVA:%p\n", (void*) va);
 	struct page_table *pt = pgdir_walk(as,va,false);
 	// DEBUG(DB_SWAP, "PT:%p\n ", pt);
 	int pt_index = VA_TO_PT_INDEX(va);
