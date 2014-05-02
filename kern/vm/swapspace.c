@@ -14,6 +14,7 @@
 #include <cpu.h>
 #include <addrspace.h>
 #include <elf.h>
+#include <spl.h>
 
 /* Pick swapping implementation below; either swapfile or raw style. Comment out
 	the one to not implement. */
@@ -506,7 +507,7 @@ int read_page(int swap_index, paddr_t page)
 	//(void)page;
 	struct thread *thread = curthread;
 	(void)thread;
-	KASSERT(coremap_lock_do_i_hold());
+	// KASSERT(coremap_lock_do_i_hold());
 	page = PADDR_TO_KVADDR(page);
 	int result = 0;
 
@@ -557,7 +558,7 @@ int evict_page(struct page* page)
 	int pt_index = VA_TO_PT_INDEX(page->va);
 	// DEBUG(DB_SWAP, "PT Index: %d\n",pt_index);
 	int* pte = &(pt->table[pt_index]);
-	DEBUG(DB_SWAP, "PTE:%p\n",(void*) *pte);
+	// DEBUG(DB_SWAP, "PTE:%p\n",(void*) *pte);
 	KASSERT(PTE_TO_LOCATION(*pte) == PTE_SWAPPING); //Check we're evicting from memory
 	// DEBUG(DB_SWAP, "PTE Location: %p\n", pte);
 	// DEBUG(DB_SWAP, "PTE Before: %p\n", (void*) *pte);
@@ -590,6 +591,7 @@ int swapout_page(struct page* page)
 	// tlb.ts_vaddr = page->va;
 	// ipi_tlbshootdown_broadcast(&tlb);
 	KASSERT(coremap_lock_do_i_hold());
+	// DEBUG(DB_SWAP,"O%p", page);
 	KASSERT(page->state == SWAPPINGOUT);
 	// DEBUG(DB_SWAP,"Swapping PAGE %p\n", page);
 	int result = 0;
@@ -604,7 +606,7 @@ int swapout_page(struct page* page)
 	int pt_index = VA_TO_PT_INDEX(page->va);
 	// DEBUG(DB_SWAP, "PT Index: %d\n",pt_index);
 	int* pte = &(pt->table[pt_index]);
-	DEBUG(DB_SWAP, "PTE:%p\n",(void*) *pte);
+	// DEBUG(DB_SWAP, "PTE:%p\n",(void*) *pte);
 	KASSERT(PTE_TO_LOCATION(*pte) == PTE_SWAPPING); //Check we're evicting from memory
 	// DEBUG(DB_SWAP, "Swapping out VA:%p at Page: %d\n", (void*) page->va, page->pa / PAGE_SIZE);
 
@@ -673,7 +675,7 @@ int swapout_page(struct page* page)
 	page->state = CLEAN;
 	KASSERT(page->as != NULL);
 	KASSERT(page->state == CLEAN);
-	KASSERT(coremap_lock_do_i_hold());
+	// KASSERT(coremap_lock_do_i_hold());
 	// release coremap lock
 	//release_swap_lock(lock2);
 	// release_coremap_lock(lock);
@@ -683,8 +685,9 @@ int swapout_page(struct page* page)
 /* SWAPFILE VERSION: Swap the specified page back into memory. */
 int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 {
+	KASSERT(page->state == LOCKED);
 
-	KASSERT(coremap_lock_do_i_hold());
+	// KASSERT(coremap_lock_do_i_hold());
 	// Check for free space in memory (finding the free space is the swap alg's job)
 	// KASSERT(page->as == NULL);
 	KASSERT(as != NULL);
@@ -748,15 +751,19 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 	// lock coremap
 
 	// mark page as DIRTY
-	page->state = DIRTY;
+	KASSERT(page->state == LOCKED);
+	int spl = splhigh();
+	// page->state = DIRTY;
 	page->va = va;
 	// mark page as in memory TODO macro
 	pt->table[pt_index] = PTE_IN_MEM(pt->table[pt_index]);
+	splx(spl);
+	// KASSERT(page->state == DIRTY);
 	KASSERT(PTE_TO_LOCATION(pt->table[pt_index]) == PTE_PM);
 	//release coremap lock
 	// release_swap_lock(lock2);
 	// release_coremap_lock(lock);
-	KASSERT(coremap_lock_do_i_hold());
+	// KASSERT(coremap_lock_do_i_hold());
 	return result;
 }
 

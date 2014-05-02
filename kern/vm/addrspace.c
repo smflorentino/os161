@@ -97,21 +97,28 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 			//If a page exists, copy it; and update the new table.
 			for(size_t pte = 0; pte< PAGE_TABLE_ENTRIES;pte++)
 			{
-				int pt_entry = oldpt->table[pte];
+				int* pt_entry = &(oldpt->table[pte]);
 				//Page Table Entry exists
-				if(pt_entry != 0x0)
+				if(*pt_entry != 0x0)
 				{
 					bool lock = get_coremap_lock();
-					//Get page permissions
-					int permissions = PTE_TO_PERMISSIONS(pt_entry);
-					//Locate the old page (swap if in, if needed)
 					struct page *oldpage = get_page(i,pte,pt_entry);
+					int spl = splhigh();
+					oldpage->state = LOCKED;
+					splx(spl);
+					//Get page permissions
+					int permissions = PTE_TO_PERMISSIONS(*pt_entry);
+					//Locate the old page (swap if in, if needed)
 					//Allocate a new page
 					struct page *newpage = page_alloc(newas,oldpage->va,permissions);
 					vaddr_t new_page_va = PADDR_TO_KVADDR(newpage->pa);
 					vaddr_t old_page_va = PADDR_TO_KVADDR(oldpage->pa);
 					//Copy the data:
 					memcpy((void*) new_page_va, (void*) old_page_va,PAGE_SIZE);
+					spl=splhigh();
+					oldpage->state = DIRTY;
+					newpage->state = DIRTY;
+					splx(spl);
 					release_coremap_lock(lock);
 				}
 				else //No page at Page Table entry 'pte'
@@ -147,11 +154,11 @@ as_destroy(struct addrspace *as)
 		{
 			for(size_t j=0;j<PAGE_TABLE_ENTRIES;j++)
 			{
-				int pt_entry = pt->table[j];
+				int* pt_entry = &(pt->table[j]);
 				//If a page exists at this entry in the table, free it.
 				if(pt_entry != 0x0)
 				{
-					int swapped = PTE_TO_LOCATION(pt_entry);
+					int swapped = PTE_TO_LOCATION(*pt_entry);
 					//If swapped, we don't need to load the page.
 					//But we do need to delete it from the swap file
 					if(swapped)

@@ -50,7 +50,8 @@
  	DIRTY,
  	FIXED,
  	SWAPPINGIN,
- 	SWAPPINGOUT
+ 	SWAPPINGOUT,
+ 	LOCKED
  } page_state_t;
 
  struct page {
@@ -85,7 +86,7 @@ struct page * page_alloc(struct addrspace *as, vaddr_t va, int permissions);
 struct page_table * pgdir_walk(struct addrspace *as, vaddr_t va, bool shouldcreate);
 
 /* Given a page table entry, return a page */
-struct page * get_page(int pdi,int pti,int pte);
+struct page * get_page(int pdi,int pti,int* pte);
 
 /* Copy a page */
 void copy_page(struct page *src, struct page *dst);
