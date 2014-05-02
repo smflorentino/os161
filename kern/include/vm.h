@@ -51,7 +51,8 @@
  	FIXED,/*3*/
  	SWAPPINGIN,/*4*/
  	SWAPPINGOUT,/*5*/
- 	LOCKED/*6*/
+ 	LOCKED,/*6*/
+ 	LOADING /*7*/
  } page_state_t;
 
  struct page {
@@ -95,6 +96,8 @@ void copy_page(struct page *src, struct page *dst);
 bool get_coremap_lock(void);
 void release_coremap_lock(bool);
 bool coremap_lock_do_i_hold(void);
+
+void unlock_loading_pages(struct addrspace *as);
 
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown_all(void);

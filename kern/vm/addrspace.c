@@ -161,19 +161,30 @@ as_destroy(struct addrspace *as)
 					int swapped = PTE_TO_LOCATION(*pt_entry);
 					//If swapped, we don't need to load the page.
 					//But we do need to delete it from the swap file
-					if(swapped)
+					if(swapped == PTE_SWAP)
 					{
 						//TODO remove page from swap file
-						kprintf("Cleaning a swap page.\n");
+						// kprintf("Cleaning a swap page.\n");
 						vaddr_t va = PD_INDEX_TO_VA(i) | PT_INDEX_TO_VA(j);
 						clean_swapfile(as, va);
 						continue;
 					}
-					struct page *page = get_page(i,j,pt);
-					vaddr_t page_location = PADDR_TO_KVADDR(page->pa);
-					free_kpages(page_location);
+					else if(swapped == PTE_SWAPPING)
+					{
+
+						panic("TODO - Free a Swapping Page");
+					}
+					else
+					{
+						// kprintf("CleanMem%d\n",j);
+						struct page *page = get_page(i,j,pt);
+						vaddr_t page_location = PADDR_TO_KVADDR(page->pa);
+						free_kpages(page_location);
+					}
 				}
+				kprintf("i%d\n",i);
 			}
+			// DEBUG(DB_SWAP,"PT:%d\n",i);
 			//Now, delete the page table. //TODO create a destory method??
 			kfree(pt);
 		}
@@ -266,7 +277,8 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		int permissions = readable | writeable | executable;
 		struct page *page = page_alloc(as,cur_vaddr,permissions);
 		cur_vaddr += PAGE_SIZE;
-		page->state = DIRTY; //CORRECT????
+		(void)page;
+		page->state = LOADING;
 	}
 
 	return 0;
@@ -295,6 +307,7 @@ as_complete_load(struct addrspace *as)
 {
 	//Enable permissions.
 	as->use_permissions = true;
+	unlock_loading_pages(as);
 	DEBUG(DB_VM, "Load complete.\n");
 	//Clear the TLB
 	as_activate(as);

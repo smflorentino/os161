@@ -60,7 +60,7 @@ get_coremap_lock()
 	else
 	{
 		spinlock_acquire(&stealmem_lock);
-		KASSERT(spinlock_do_i_hold(&stealmem_lock));
+		// KASSERT(spinlock_do_i_hold(&stealmem_lock));
 		// DEBUG(DB_SWAP, "\n**GL**\n");
 		return 1;
 	}
@@ -128,8 +128,51 @@ get_a_dirty_page_index(int retry)
 		}
 	}
 	splx(spl);
-	if(retry)
+	if(retry == 1)
 	{
+		int spl = splhigh();
+		current_index = 0;
+		size_t start = current_index;
+		for(size_t i = start; i<page_count; i++)
+		{
+			// KASSERT(spinlock_do_i_hold(&stealmem_lock));
+			// DEBUG(DB_SWAP,"DPI: %d\n", i);
+			if(retry)
+			{
+				// DEBUG(DB_SWAP,"I: %d State: %d\n",i,core_map[i].state);
+			}
+			if(core_map[i].state == DIRTY)
+			{
+				KASSERT(core_map[i].state == DIRTY);
+				current_index = i+1;
+				core_map[i].state = SWAPPINGOUT;
+				//Update PTE to state PTE_SWAPPING
+				struct page_table *pt = pgdir_walk(core_map[i].as,core_map[i].va,false);
+				int pt_index = VA_TO_PT_INDEX(core_map[i].va);
+				pt->table[pt_index] |= PTE_SWAPPING;
+				// DEBUG(DB_SWAP, "%d\n",pt->table[pt_index]);
+				//////////////////////////////////
+				splx(spl);
+				struct thread *thread = curthread;
+				(void)thread;
+				// DEBUG(DB_SWAP, "DPI: %d%d\n",i,core_map[i].state);
+				// KASSERT(spinlock_do_i_hold(&stealmem_lock));
+				KASSERT(core_map[i].state == SWAPPINGOUT);
+				return i;
+			}
+		}
+		splx(spl);
+		retry = 2;
+		// panic("get a dirty page index failed");	
+	}
+	if(retry == 2)
+	{
+		for(size_t i = 0;i<page_count;i++)
+		{
+			DEBUG(DB_SWAP,"I:%d S:%d\n",i,core_map[i].state);
+		}
+		panic("get a dirty page index failed");
+
 		// DEBUG(DB_SWAP,"retry\n");
 		return -1;
 		// panic("Couldn't find a dirty page!");
@@ -139,7 +182,7 @@ get_a_dirty_page_index(int retry)
 	// release_coremap_lock(lock);
 	// DEBUG(DB_SWAP,"??%d\n",spinlock_do_i_hold(&stealmem_lock));
 	// KASSERT(spinlock_do_i_hold(&stealmem_lock) == true);
-	return get_a_dirty_page_index(true);
+	return get_a_dirty_page_index(1);
 
 
 	panic("Get dirty page index is broken!");
@@ -260,14 +303,14 @@ make_pages_available(int npages, bool retry)
 			}
 		}
 		//If we get here, we reached the end of memory. Try again ONCE.
-		if(retry)
+		if(retry == 2)
 		{
 			panic("Couldn't swap a big enough chunk for npages!");
 		}
 		else
 		{
 			splx(spl);
-			make_pages_available(npages,true);
+			make_pages_available(npages,1);
 		}
 	}
 	// release_coremap_lock(lock);
@@ -735,7 +778,6 @@ page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 	{
 		DEBUG(DB_SWAP,"%d: %d\n",i,core_map[i].state);
 	}
-	while(true) {}
 	panic("No available pages for single page alloc!");
 	return 0x0;
 }
@@ -848,6 +890,17 @@ void free_kpages(vaddr_t addr)
 		}
 	}
 	panic("VA Doesn't exist!");
+}
+
+void unlock_loading_pages(struct addrspace *as)
+{
+	for(size_t i = 0;i<page_count;i++)
+	{
+		if(core_map[i].as == as)
+		{
+			core_map[i].state = DIRTY;
+		}
+	}
 }
 
 /* TLB shootdown handling called from interprocessor_interrupt */
