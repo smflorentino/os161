@@ -91,7 +91,7 @@ coremap_lock_do_i_hold()
  */
 static 
 size_t
-get_a_dirty_page_index(bool retry)
+get_a_dirty_page_index(int retry)
 {
 
 	// bool lock = get_coremap_lock();
@@ -103,6 +103,10 @@ get_a_dirty_page_index(bool retry)
 	{
 		// KASSERT(spinlock_do_i_hold(&stealmem_lock));
 		// DEBUG(DB_SWAP,"DPI: %d\n", i);
+		if(retry)
+		{
+			// DEBUG(DB_SWAP,"I: %d State: %d\n",i,core_map[i].state);
+		}
 		if(core_map[i].state == DIRTY)
 		{
 			KASSERT(core_map[i].state == DIRTY);
@@ -126,7 +130,8 @@ get_a_dirty_page_index(bool retry)
 	splx(spl);
 	if(retry)
 	{
-		DEBUG(DB_SWAP,"retry");
+		// DEBUG(DB_SWAP,"retry\n");
+		return -1;
 		// panic("Couldn't find a dirty page!");
 	}
 	//Reached end of core map. Start from beginning.
@@ -138,7 +143,7 @@ get_a_dirty_page_index(bool retry)
 
 
 	panic("Get dirty page index is broken!");
-	return -1;
+	// return -1;
 }
 
 
@@ -159,7 +164,11 @@ make_page_available()
 		(void)cur;
 		// DEBUG(DB_SWAP, "Making page available\n");
 		// DEBUG(DB_SWAP, "Start Swap: %d\n",free_pages);	
-		size_t rr_page = get_a_dirty_page_index(false);
+		int rr_page = get_a_dirty_page_index(0);
+		if(rr_page == -1)
+		{
+			return;
+		}
 		KASSERT(spinlock_do_i_hold(&stealmem_lock));
 		KASSERT(core_map[rr_page].state == SWAPPINGOUT);
 		// DEBUG(DB_SWAP, "SWOs%d\n",rr_page);
@@ -391,12 +400,12 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		if(faultaddress < as->stack && faultaddress > USER_STACK_LIMIT)
 		{
 			as->stack -= PAGE_SIZE;
-			page_alloc(as,as->stack, PF_RW);
+			page = page_alloc(as,as->stack, PF_RW);
 		}
 		//Heap
 		else if(faultaddress < as->heap_end && faultaddress >= as->heap_start)
 		{
-			page_alloc(as,faultaddress, PF_RW);
+			page = page_alloc(as,faultaddress, PF_RW);
 		}
 		else
 		{
@@ -511,7 +520,7 @@ pgdir_walk(struct addrspace *as, vaddr_t va, bool create)
 		}
 		as->page_dir[pd_index] = pt;
 	}
-	KASSERT(pt != NULL);
+	// KASSERT(pt != NULL);
 	return pt;
 }
 
@@ -521,19 +530,20 @@ pgdir_walk(struct addrspace *as, vaddr_t va, bool create)
  *
  * If the page was swapped out on disk, swap it in before returning. */
 struct page *
-get_page(int pdi, int pti, int* pte)
+get_page(int pdi, int pti, struct page_table* pt)
 {
-	int swapped = PTE_TO_LOCATION(*pte);
+	int swapped = PTE_TO_LOCATION(pt->table[pti]);
 	bool lock = get_coremap_lock();
 	while(swapped == PTE_SWAPPING)
 	{
 		thread_yield();
-		swapped = PTE_TO_LOCATION(*pte);
+		swapped = PTE_TO_LOCATION(pt->table[pti]);
 	}
 	if(swapped == PTE_SWAPPING)
 	{
 		panic("BOB SAGGOT");
 	}
+	int* pte = &(pt->table[pti]);
 	if(swapped == PTE_SWAP)
 	{
 		//Get the address space, virtual address, and permissions from PTE.
@@ -721,6 +731,11 @@ page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 	}
 	release_coremap_lock(lock);
 
+	for(size_t i = 0;i<page_count;i++)
+	{
+		DEBUG(DB_SWAP,"%d: %d\n",i,core_map[i].state);
+	}
+	while(true) {}
 	panic("No available pages for single page alloc!");
 	return 0x0;
 }

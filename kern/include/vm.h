@@ -45,13 +45,13 @@
 #define VM_FAULT_READONLY    2    /* A write to a readonly page was attempted*/
 
  typedef enum {
- 	FREE,
- 	CLEAN,
- 	DIRTY,
- 	FIXED,
- 	SWAPPINGIN,
- 	SWAPPINGOUT,
- 	LOCKED
+ 	FREE,/*0*/
+ 	CLEAN,/*1*/
+ 	DIRTY,/*2*/
+ 	FIXED,/*3*/
+ 	SWAPPINGIN,/*4*/
+ 	SWAPPINGOUT,/*5*/
+ 	LOCKED/*6*/
  } page_state_t;
 
  struct page {
@@ -86,7 +86,7 @@ struct page * page_alloc(struct addrspace *as, vaddr_t va, int permissions);
 struct page_table * pgdir_walk(struct addrspace *as, vaddr_t va, bool shouldcreate);
 
 /* Given a page table entry, return a page */
-struct page * get_page(int pdi,int pti,int* pte);
+struct page * get_page(int pdi,int pti,struct page_table *pt);
 
 /* Copy a page */
 void copy_page(struct page *src, struct page *dst);

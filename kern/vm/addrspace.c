@@ -95,14 +95,14 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 			newas->page_dir[i] = newpt;
 			//Now iterate through each entry in the page table.
 			//If a page exists, copy it; and update the new table.
-			for(size_t pte = 0; pte< PAGE_TABLE_ENTRIES;pte++)
+			for(size_t pti = 0; pti< PAGE_TABLE_ENTRIES;pti++)
 			{
-				int* pt_entry = &(oldpt->table[pte]);
+				int* pt_entry = &(oldpt->table[pti]);
 				//Page Table Entry exists
 				if(*pt_entry != 0x0)
 				{
 					bool lock = get_coremap_lock();
-					struct page *oldpage = get_page(i,pte,pt_entry);
+					struct page *oldpage = get_page(i,pti,oldpt);
 					int spl = splhigh();
 					oldpage->state = LOCKED;
 					splx(spl);
@@ -123,7 +123,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 				}
 				else //No page at Page Table entry 'pte'
 				{
-					newpt->table[pte] = 0x0;
+					newpt->table[pti] = 0x0;
 				}
 			}
 		}
@@ -169,7 +169,7 @@ as_destroy(struct addrspace *as)
 						clean_swapfile(as, va);
 						continue;
 					}
-					struct page *page = get_page(i,j,pt_entry);
+					struct page *page = get_page(i,j,pt);
 					vaddr_t page_location = PADDR_TO_KVADDR(page->pa);
 					free_kpages(page_location);
 				}
@@ -265,9 +265,8 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		DEBUG(DB_VM, "CURVA:%p\n", (void*) cur_vaddr);
 		int permissions = readable | writeable | executable;
 		struct page *page = page_alloc(as,cur_vaddr,permissions);
-		(void) page;
-
 		cur_vaddr += PAGE_SIZE;
+		page->state = DIRTY; //CORRECT????
 	}
 
 	return 0;
