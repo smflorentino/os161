@@ -148,11 +148,11 @@ int swapspace_init(void)
 static
 int write_page(int swap_index, paddr_t page)
 {
-	//(void)swap_index;
-	//(void)page;
 	struct thread *thread = curthread;
 	(void)thread;
-	KASSERT(coremap_lock_do_i_hold());
+
+	//KASSERT(coremap_lock_do_i_hold());
+
 	page = PADDR_TO_KVADDR(page);
 	int result = 0;
 
@@ -162,7 +162,7 @@ int write_page(int swap_index, paddr_t page)
 	off_t pos = SIND_TO_DISK(swap_index);
 
 	uio_kinit(&iov, &page_write_uio, (void*)page, PAGE_SIZE, pos, UIO_WRITE);
-	KASSERT(coremap_lock_do_i_hold());
+	//KASSERT(coremap_lock_do_i_hold());
 	//bool lock = true;
 	//release_coremap_lock(lock);
 	result = VOP_WRITE(swapspace, &page_write_uio);
@@ -173,12 +173,11 @@ int write_page(int swap_index, paddr_t page)
 
 	return result;
 }
+
 /* SWAPFILE VERSION: Contains uio setup and execution for reading page from disk file. */
 static
 int read_page(int swap_index, paddr_t page)
 {
-	//(void)swap_index;
-	//(void)page;
 	struct thread *thread = curthread;
 	(void)thread;
 	// KASSERT(coremap_lock_do_i_hold());
@@ -215,7 +214,7 @@ int evict_page(struct page* page)
 	//if(!holdlock) {
 	//	lock_acquire(core_map_lock);
 	//}
-	// bool lock = get_coremap_lock();
+	bool lock = get_coremap_lock();
 	// DEBUG(DB_SWAP,"Evicting PAGE %p\n", page);
 	// Double check that the page exists
 	// Double check that page is clean.
@@ -236,9 +235,11 @@ int evict_page(struct page* page)
 	KASSERT(PTE_TO_LOCATION(*pte) == PTE_SWAPPING); //Check we're evicting from memory
 	// DEBUG(DB_SWAP, "PTE Location: %p\n", pte);
 	// DEBUG(DB_SWAP, "PTE Before: %p\n", (void*) *pte);
+
 	*pte &= 0xFFFFFFBF;		 // Flips the bit to indicate swapped
 	pte = &(pt->table[pt_index]);	
 	KASSERT(PTE_TO_LOCATION(*pte) == PTE_SWAP); // Check that the bit was set correctly.
+	
 	// DEBUG(DB_SWAP, "PTE After: %p\n", (void*) *pte);
 	// Update the coremap to list the physical page as free
 	//free_kpages(page->va);
@@ -248,7 +249,7 @@ int evict_page(struct page* page)
 	KASSERT(page->state == FREE);
 	// Unlock core map
 	//lock_release(core_map_lock);
-	// release_coremap_lock(lock);
+	release_coremap_lock(lock);
 
 	return result;
 
@@ -259,18 +260,18 @@ int evict_page(struct page* page)
 int swapout_page(struct page* page)
 {	
 	// DEBUG(DB_SWAP,"SWO%d\n", page->pa/PAGE_SIZE);
-	// bool lock = get_coremap_lock();
+	bool lock = get_coremap_lock();
 	// Shootdown the TLB for all CPU's
 	// struct tlbshootdown tlb;
 	// tlb.ts_vaddr = page->va;
 	// ipi_tlbshootdown_broadcast(&tlb);
-	KASSERT(coremap_lock_do_i_hold());
+	//KASSERT(coremap_lock_do_i_hold());
 	// DEBUG(DB_SWAP,"O%p", page);
 	KASSERT(page->state == SWAPPINGOUT);
 	// DEBUG(DB_SWAP,"Swapping PAGE %p\n", page);
 	int result = 0;
 	int swap_index;
-	//bool lock2 = get_swap_lock();
+	bool lock2 = get_swap_lock();
 	KASSERT(page->as != NULL);
 
 	// Update the Page Table to list the page as swapped
@@ -302,7 +303,7 @@ int swapout_page(struct page* page)
 
 	// Lock the swap table while checking and updating it.
 	//bool sw_lock = get_swap_lock();
-	bool sw_lock = get_swap_spinlock();
+	//bool sw_lock = get_swap_spinlock();
 
 	// Check swap space to see if this page is already there...
 	swap_index = -1;	// -1 is an invalid index
@@ -340,7 +341,7 @@ int swapout_page(struct page* page)
 
 	//Swap table updated, so we can release the lock
 	//release_swap_lock(sw_lock);
-	release_swap_spinlock(sw_lock);
+	//release_swap_spinlock(sw_lock);
 
 	// Write page to disk; page should be marked for swapping out
 	KASSERT(page->state == SWAPPINGOUT);
@@ -361,8 +362,8 @@ int swapout_page(struct page* page)
 	KASSERT(page->state == CLEAN);
 	// KASSERT(coremap_lock_do_i_hold());
 	// release coremap lock
-	//release_swap_lock(lock2);
-	// release_coremap_lock(lock);
+	release_swap_lock(lock2);
+	release_coremap_lock(lock);
 	return result;
 }
 
@@ -380,11 +381,9 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 	(void)result;
 	int swap_index;
 
-
-
 	// check coremap do i have?
-	// bool lock = get_coremap_lock();
-	//bool lock2 = get_swap_lock();
+	bool lock = get_coremap_lock();
+	bool lock2 = get_swap_lock();
 
 	// double check that page exists
 	// double check that page is swappe
@@ -400,7 +399,7 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 
 	// lock the swap table
 	//bool sw_lock = get_swap_lock();
-	bool sw_lock = get_swap_spinlock();
+	//bool sw_lock = get_swap_spinlock();
 
 	// Locate the swapped page in the swap table
 	swap_index = -1;	// -1 is an invalid index
@@ -430,7 +429,7 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 	// mark page as SWAPPING IN PROGRESS
 	// Finished checking swap table, release its lock
 	//release_swap_lock(sw_lock);
-	release_swap_spinlock(sw_lock);
+	//release_swap_spinlock(sw_lock);
 
 	// swap in the page
 	read_page(swap_index, page->pa);
@@ -450,8 +449,8 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 	// KASSERT(page->state == DIRTY);
 	KASSERT(PTE_TO_LOCATION(pt->table[pt_index]) == PTE_PM);
 	//release coremap lock
-	// release_swap_lock(lock2);
-	// release_coremap_lock(lock);
+	release_swap_lock(lock2);
+	release_coremap_lock(lock);
 	// KASSERT(coremap_lock_do_i_hold());
 	return result;
 }
@@ -463,8 +462,8 @@ clean_swapfile(struct addrspace* as, vaddr_t va)
 	int result = 0;
 
 	// Modifying the swap table, so lock it.
-	//bool sw_lock = get_swap_lock();
-	bool sw_lock = get_swap_spinlock();
+	bool sw_lock = get_swap_lock();
+	//bool sw_lock = get_swap_spinlock();
 
 	// Locate the swapped page in the swap table
 	int swap_index = -1;	// -1 is an invalid index
@@ -483,11 +482,11 @@ clean_swapfile(struct addrspace* as, vaddr_t va)
 	}
 
 	// All we do is make the swap entry null, same as in swapspace_init(). 
-	DEBUG(DB_SWAP,"Cleaning a swap page.\n");
+	//DEBUG(DB_SWAP,"Cleaning a swap page.\n");
 	swap_table[swap_index].as = NULL;
 
-	//release_swap_lock(sw_lock);
-	release_swap_spinlock(sw_lock);
+	release_swap_lock(sw_lock);
+	//release_swap_spinlock(sw_lock);
 
 	return result;
 }
