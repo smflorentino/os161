@@ -20,7 +20,7 @@
 #include <elf.h>
 #include <swapspace.h>
 /*
- * Wrap rma_stealmem in a spinlock.
+ * Wrap ram_stealmem in a spinlock.
  */
 /* Maximum of 1MB of user stack */
 #define VM_STACKPAGES	256
@@ -98,7 +98,7 @@ get_a_dirty_page_index(int retry)
 	// KASSERT(spinlock_do_i_hold(&stealmem_lock));
 	// DEBUG(DB_SWAP, "Cur:%d\n",current_index);
 	size_t start = current_index;
-	int spl = splhigh();
+	//int spl = splhigh();
 	for(size_t i = start; i<page_count; i++)
 	{
 		// KASSERT(spinlock_do_i_hold(&stealmem_lock));
@@ -118,7 +118,7 @@ get_a_dirty_page_index(int retry)
 			pt->table[pt_index] |= PTE_SWAPPING;
 			// DEBUG(DB_SWAP, "%d\n",pt->table[pt_index]);
 			//////////////////////////////////
-			splx(spl);
+			//splx(spl);
 			struct thread *thread = curthread;
 			(void)thread;
 			// DEBUG(DB_SWAP, "DPI: %d%d\n",i,core_map[i].state);
@@ -127,10 +127,10 @@ get_a_dirty_page_index(int retry)
 			return i;
 		}
 	}
-	splx(spl);
+	//splx(spl);
 	if(retry == 1)
 	{
-		int spl = splhigh();
+		//int spl = splhigh();
 		current_index = 0;
 		size_t start = current_index;
 		for(size_t i = start; i<page_count; i++)
@@ -152,7 +152,7 @@ get_a_dirty_page_index(int retry)
 				pt->table[pt_index] |= PTE_SWAPPING;
 				// DEBUG(DB_SWAP, "%d\n",pt->table[pt_index]);
 				//////////////////////////////////
-				splx(spl);
+				//splx(spl);
 				struct thread *thread = curthread;
 				(void)thread;
 				// DEBUG(DB_SWAP, "DPI: %d%d\n",i,core_map[i].state);
@@ -161,16 +161,20 @@ get_a_dirty_page_index(int retry)
 				return i;
 			}
 		}
-		splx(spl);
+		//splx(spl);
 		retry = 2;
 		// panic("get a dirty page index failed");	
 	}
 	if(retry == 2)
 	{
+		DEBUG(DB_SWAP,"\n");
 		for(size_t i = 0;i<page_count;i++)
 		{
+			int spl = splhigh();
 			DEBUG(DB_SWAP,"I:%d S:%d\n",i,core_map[i].state);
+			splx(spl);
 		}
+		
 		panic("get a dirty page index failed");
 
 		// DEBUG(DB_SWAP,"retry\n");
@@ -202,11 +206,12 @@ make_page_available()
 {
 	KASSERT(spinlock_do_i_hold(&stealmem_lock));
 	// DEBUG(DB_SWAP, "Free Pages: %d\n",free_pages);	
-	if(free_pages <= 12) {
+	if(free_pages <= 10) {
 		struct thread *cur = curthread;
 		(void)cur;
 		// DEBUG(DB_SWAP, "Making page available\n");
-		// DEBUG(DB_SWAP, "Start Swap: %d\n",free_pages);	
+		//DEBUG(DB_SWAP, "Start Swap: %d\n",free_pages);	
+		//DEBUG(DB_SWAP, "\nStart Swapping\n");	
 		int rr_page = get_a_dirty_page_index(0);
 		if(rr_page == -1)
 		{
@@ -220,7 +225,7 @@ make_page_available()
 		// DEBUG(DB_SWAP, "Starting Eviction...%d\n",rr_page);
 		evict_page(&core_map[rr_page]);
 		// KASSERT(spinlock_do_i_hold(&stealmem_lock));
-		// DEBUG(DB_SWAP, "Evicted %d\n",rr_page);
+		//DEBUG(DB_SWAP, "Evicted %d\n",rr_page);
 	}
 	// KASSERT(spinlock_do_i_hold(&stealmem_lock));
 }
@@ -237,8 +242,8 @@ make_pages_available(int npages, bool retry)
 	// bool lock = get_coremap_lock();
 	// DEBUG(DB_SWAP,"MPA:%d\n",npages);
 	if(free_pages <= 10) {
-		//Disable interrupts until we find the right number of pages.
-		int spl = splhigh();
+		//Disable interrupts until we find the right number of pages. ->should be disabled in page_alloc()
+		//int spl = splhigh();
 		size_t rr_page = current_n_index;
 		if(retry)
 		{
@@ -286,7 +291,7 @@ make_pages_available(int npages, bool retry)
 					}
 				}
 				current_index = startingPage + npages + 1;
-				splx(spl);
+				//splx(spl);
 				//Swap out the block of pages, now
 				for(int j = startingPage; j<startingPage + npages; j++)
 				{
@@ -294,6 +299,7 @@ make_pages_available(int npages, bool retry)
 					// DEBUG(DB_SWAP,"SWOn%d-%d\n",j,npages);
 					if(core_map[j].state == SWAPPINGOUT)
 					{
+						KASSERT(spinlock_do_i_hold(&stealmem_lock));
 						swapout_page(&core_map[j]);
 						evict_page(&core_map[j]);	
 					}
@@ -305,11 +311,19 @@ make_pages_available(int npages, bool retry)
 		//If we get here, we reached the end of memory. Try again ONCE.
 		if(retry == 2)
 		{
+			DEBUG(DB_SWAP,"\n");
+			for(size_t i = 0;i<page_count;i++)
+			{
+				//int spl = splhigh();
+				DEBUG(DB_SWAP,"I:%d S:%d\n",i,core_map[i].state);
+				//splx(spl);
+			}
+
 			panic("Couldn't swap a big enough chunk for npages!");
 		}
 		else
 		{
-			splx(spl);
+			//splx(spl);
 			make_pages_available(npages,1);
 		}
 	}
@@ -390,7 +404,7 @@ void vm_bootstrap()
 }
 
 /* Fault handling function called by trap code */
-//TODO permissions.
+
 int vm_fault(int faulttype, vaddr_t faultaddress) 
 {
 	//int spl = splhigh();
@@ -468,6 +482,9 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	while(swapped == PTE_SWAPPING)
 	{
 		thread_yield();
+		pfn = PTE_TO_PFN(pt->table[pt_index]);
+		permissions = PTE_TO_PERMISSIONS(pt->table[pt_index]);
+		swapped = PTE_TO_LOCATION(pt->table[pt_index]);
 	}
 	if(swapped == PTE_SWAP)
 	{
@@ -576,12 +593,17 @@ struct page *
 get_page(int pdi, int pti, struct page_table* pt)
 {
 	int swapped = PTE_TO_LOCATION(pt->table[pti]);
-	bool lock = get_coremap_lock();
+	
 	while(swapped == PTE_SWAPPING)
 	{
+		//if(spinlock_do_i_hold(&stealmem_lock)){
+		//	release_coremap_lock(1);
+		//}
 		thread_yield();
 		swapped = PTE_TO_LOCATION(pt->table[pti]);
+		//DEBUG(DB_SWAP,"status: %d", swapped);
 	}
+	
 	if(swapped == PTE_SWAPPING)
 	{
 		panic("BOB SAGGOT");
@@ -589,6 +611,7 @@ get_page(int pdi, int pti, struct page_table* pt)
 	int* pte = &(pt->table[pti]);
 	if(swapped == PTE_SWAP)
 	{
+		bool lock = get_coremap_lock();
 		//Get the address space, virtual address, and permissions from PTE.
 		struct addrspace *as = curthread->t_addrspace;
 		vaddr_t va = PD_INDEX_TO_VA(pdi) | PT_INDEX_TO_VA(pti);
@@ -607,8 +630,8 @@ get_page(int pdi, int pti, struct page_table* pt)
 		pt = pgdir_walk(as,va,false);
 		*pte = pt->table[pti];
 		// DEBUG(DB_SWAP,"I%p\n", page);
+		release_coremap_lock(lock);
 	}
-	release_coremap_lock(lock);
 	int page_num = PTE_TO_PFN(*pte) / PAGE_SIZE;
 	return &core_map[page_num];
 }
@@ -739,7 +762,9 @@ free_fixed_page(size_t page_num)
 struct page *
 page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 {
+	int spl = splhigh();
 	bool lock = get_coremap_lock();
+
 	KASSERT(spinlock_do_i_hold(&stealmem_lock));
 	// DEBUG(DB_SWAP, "Need page for %p\n",(void*) va);
 	#ifdef SWAPPING_ENABLED
@@ -747,37 +772,47 @@ page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 	make_page_available();
 	// KASSERT(spinlock_do_i_hold(&stealmem_lock));
 	#endif
-
-	for(size_t i = 0;i<page_count;i++)
-	{
-		int spl = splhigh();
-		if(core_map[i].state == FREE)
+	int j = 0;
+	while(j < 7){
+		for(size_t i = 0;i<page_count;i++)
 		{
-			if(as == NULL)
+			//int spl = splhigh();
+			if(core_map[i].state == FREE)
 			{
-				KASSERT(va == 0x0);
-				// DEBUG(DB_SWAP, "Getting page %d for FIXED\n",i);
-				allocate_fixed_page(i);				
+				if(as == NULL)
+				{
+					KASSERT(va == 0x0);
+					// DEBUG(DB_SWAP, "Getting page %d for FIXED\n",i);
+					allocate_fixed_page(i);				
+				}
+				else
+				{
+					KASSERT(va != 0x0);
+					// DEBUG(DB_SWAP, "Getting page %d for %p\n",i, (void*) va);
+					allocate_nonfixed_page(i,as,va,permissions);
+				}
+				core_map[i].npages = 1;
+				release_coremap_lock(lock);
+				splx(spl);
+				return &core_map[i];
 			}
-			else
-			{
-				KASSERT(va != 0x0);
-				// DEBUG(DB_SWAP, "Getting page %d for %p\n",i, (void*) va);
-				allocate_nonfixed_page(i,as,va,permissions);
-			}
-			core_map[i].npages = 1;
-			splx(spl);
-			release_coremap_lock(lock);
-			return &core_map[i];
 		}
-		splx(spl);
+		#ifdef SWAPPING_ENABLED
+		//Make a page available for allocation, if needed.
+		make_page_available();
+		// KASSERT(spinlock_do_i_hold(&stealmem_lock));
+		#endif
+		j++;
 	}
-	release_coremap_lock(lock);
 
+	DEBUG(DB_SWAP,"\n\nFailed in page_alloc()\n");
 	for(size_t i = 0;i<page_count;i++)
 	{
 		DEBUG(DB_SWAP,"%d: %d\n",i,core_map[i].state);
 	}
+	release_coremap_lock(lock);
+	splx(spl);
+
 	panic("No available pages for single page alloc!");
 	return 0x0;
 }
@@ -869,6 +904,8 @@ void free_kpages(vaddr_t addr)
 		panic("Tried to free a direct-mapped address\n");	
 	}
 	
+	/* Disable interrupts on this CPU while frobbing the TLB. */
+	int spl = splhigh();
 	bool lock = get_coremap_lock();
 
 	// kprintf("Freeing VA:%p\n", (void*) addr);
@@ -886,6 +923,7 @@ void free_kpages(vaddr_t addr)
 				free_fixed_page(j);
 			}
 			release_coremap_lock(lock);
+			splx(spl);
 			return;
 		}
 	}

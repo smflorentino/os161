@@ -161,6 +161,12 @@ as_destroy(struct addrspace *as)
 					int swapped = PTE_TO_LOCATION(*pt_entry);
 					//If swapped, we don't need to load the page.
 					//But we do need to delete it from the swap file
+					
+					while(swapped == PTE_SWAPPING) {
+						thread_yield();
+						swapped = PTE_TO_LOCATION(*pt_entry);
+					}
+
 					if(swapped == PTE_SWAP)
 					{
 						//TODO remove page from swap file
@@ -171,7 +177,7 @@ as_destroy(struct addrspace *as)
 					}
 					else if(swapped == PTE_SWAPPING)
 					{
-
+						// Handled by thred_yield while loop above (supposedly)
 						panic("TODO - Free a Swapping Page");
 					}
 					else
@@ -182,7 +188,7 @@ as_destroy(struct addrspace *as)
 						free_kpages(page_location);
 					}
 				}
-				kprintf("i%d\n",i);
+				//kprintf("i%d\n",i);
 			}
 			// DEBUG(DB_SWAP,"PT:%d\n",i);
 			//Now, delete the page table. //TODO create a destory method??

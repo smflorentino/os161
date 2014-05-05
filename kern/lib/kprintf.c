@@ -87,6 +87,7 @@ console_send(void *junk, const char *data, size_t len)
 	for (i=0; i<len; i++) {
 		putch(data[i]);
 	}
+
 }
 
 /*
