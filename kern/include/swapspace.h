@@ -24,6 +24,10 @@ struct swap_entry {
 bool get_swap_lock(void);
 void release_swap_lock(bool release);
 
+/* Swap spinlock functions for protecting the swap table structure if needed. */
+bool get_swap_spinlock(void);
+void release_swap_spinlock(bool release);
+
 /* Initialize the hdd for page swapping. Hdd selected in swapspace.c */
 int swapspace_init(void);
 

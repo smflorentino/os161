@@ -78,12 +78,14 @@ int
 as_copy(struct addrspace *old, struct addrspace **ret)
 {
 	struct addrspace *newas;
+	bool lock;
 
 	newas = as_create();
 	if (newas==NULL) {
 		return ENOMEM;
 	}
 
+	lock = get_coremap_lock();
 	//Go through entries in page directory.
 	for(size_t i = 0;i<PAGE_DIR_ENTRIES;i++)
 	{
@@ -103,11 +105,11 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 				//Page Table Entry exists
 				if(*pt_entry != 0x0)
 				{
-					bool lock = get_coremap_lock();
+					//bool lock = get_coremap_lock();
 					struct page *oldpage = get_page(i,pti,oldpt);
-					int spl = splhigh();
+					//int spl = splhigh();
 					oldpage->state = LOCKED;
-					splx(spl);
+					//splx(spl);
 					//Get page permissions
 					int permissions = PTE_TO_PERMISSIONS(*pt_entry);
 					//Locate the old page (swap if in, if needed)
@@ -117,11 +119,11 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 					vaddr_t old_page_va = PADDR_TO_KVADDR(oldpage->pa);
 					//Copy the data:
 					memcpy((void*) new_page_va, (void*) old_page_va,PAGE_SIZE);
-					spl=splhigh();
+					//spl=splhigh();
 					oldpage->state = DIRTY;
 					newpage->state = DIRTY;
-					splx(spl);
-					release_coremap_lock(lock);
+					//splx(spl);
+					//release_coremap_lock(lock);
 				}
 				else //No page at Page Table entry 'pte'
 				{
@@ -134,6 +136,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 				newas->page_dir[i] = NULL;
 		}
 	}
+	release_coremap_lock(lock);
 	
 	*ret = newas;
 	return 0;
@@ -146,6 +149,9 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 void
 as_destroy(struct addrspace *as)
 {
+	bool lock;
+	lock = get_coremap_lock();
+
 	//Go through each entry in the page directory.
 	for(size_t i = 0;i<PAGE_DIR_ENTRIES;i++)
 	{
@@ -163,6 +169,14 @@ as_destroy(struct addrspace *as)
 					int swapped = PTE_TO_LOCATION(*pt_entry);
 					//If swapped, we don't need to load the page.
 					//But we do need to delete it from the swap file
+					
+					while(swapped == PTE_SWAPPING) {
+						//release_coremap_lock(lock);
+						thread_yield();
+						swapped = PTE_TO_LOCATION(*pt_entry);
+						//lock = get_coremap_lock();
+					}
+
 					if(swapped == PTE_SWAP)
 					{
 						//TODO remove page from swap file
@@ -173,7 +187,7 @@ as_destroy(struct addrspace *as)
 					}
 					else if(swapped == PTE_SWAPPING)
 					{
-
+						// Handled by thred_yield while loop above (supposedly)
 						panic("TODO - Free a Swapping Page");
 					}
 					else
@@ -184,12 +198,17 @@ as_destroy(struct addrspace *as)
 						free_kpages(page_location);
 					}
 				}
+<<<<<<< HEAD
+=======
+				//kprintf("i%d\n",i);
+>>>>>>> 5d9d1489627dfd8acac81a8bb791ebbabf448624
 			}
 			// DEBUG(DB_SWAP,"PT:%d\n",i);
 			//Now, delete the page table. //TODO create a destory method??
 			kfree(pt);
 		}
 	}
+	release_coremap_lock(lock);
 	//Now, delete the address space.
 	kfree(as);
 }

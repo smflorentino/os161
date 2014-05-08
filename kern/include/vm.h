@@ -95,6 +95,11 @@ struct page * get_page(int pdi,int pti,struct page_table *pt);
 void copy_page(struct page *src, struct page *dst);
 
 /* Functions to get core map lock*/
+bool get_coremap_spinlock(void);
+void release_coremap_spinlock(bool);
+bool coremap_spinlock_do_i_hold(void);
+
+/* Functions to get coremap lock*/
 bool get_coremap_lock(void);
 void release_coremap_lock(bool);
 bool coremap_lock_do_i_hold(void);
