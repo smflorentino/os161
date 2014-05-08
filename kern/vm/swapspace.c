@@ -262,16 +262,16 @@ int swapout_page(struct page* page)
 	// DEBUG(DB_SWAP,"SWO%d\n", page->pa/PAGE_SIZE);
 	bool lock = get_coremap_lock();
 	// Shootdown the TLB for all CPU's
-	// struct tlbshootdown tlb;
-	// tlb.ts_vaddr = page->va;
-	// ipi_tlbshootdown_broadcast(&tlb);
+	struct tlbshootdown tlb;
+	tlb.ts_vaddr = page->va;
+	//ipi_tlbshootdown_broadcast(&tlb);
 	//KASSERT(coremap_lock_do_i_hold());
 	// DEBUG(DB_SWAP,"O%p", page);
 	KASSERT(page->state == SWAPPINGOUT);
 	// DEBUG(DB_SWAP,"Swapping PAGE %p\n", page);
 	int result = 0;
 	int swap_index;
-	bool lock2 = get_swap_lock();
+	//bool lock2 = get_swap_lock();
 	KASSERT(page->as != NULL);
 
 	// Update the Page Table to list the page as swapped
@@ -284,7 +284,7 @@ int swapout_page(struct page* page)
 	// DEBUG(DB_SWAP, "PTE:%p\n",(void*) *pte);
 	KASSERT(PTE_TO_LOCATION(*pte) == PTE_SWAPPING); //Check we're evicting from memory
 	// DEBUG(DB_SWAP, "Swapping out VA:%p at Page: %d\n", (void*) page->va, page->pa / PAGE_SIZE);
-	release_coremap_lock(lock);
+	//release_coremap_lock(lock);
 	// check coremap lock do i have?
 	//lock coremap
 	//bool holdlock = lock_do_i_hold(core_map_lock);
@@ -329,7 +329,7 @@ int swapout_page(struct page* page)
 	if (swap_index < 0) {
 		panic("Out of disk space!!!");
 	}
-	release_swap_lock(lock2);
+	//release_swap_lock(lock2);
 	// Write zeros to swap?
 
 	// Lock the swap_table lock, since it's shared
@@ -363,7 +363,7 @@ int swapout_page(struct page* page)
 	// KASSERT(coremap_lock_do_i_hold());
 	// release coremap lock
 
-	// release_coremap_lock(lock);
+	release_coremap_lock(lock);
 	return result;
 }
 

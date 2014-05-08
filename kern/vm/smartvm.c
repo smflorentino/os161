@@ -631,6 +631,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	// What does it mean for the page to be NULL in this case?
 	if(page != NULL)
 	{
+		DEBUG(DB_VM, "Page State: %d\n", page->state);
 		page->state = DIRTY;
 	}
 
