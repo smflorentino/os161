@@ -173,10 +173,9 @@ get_a_dirty_page_index(int retry)
 			splx(spl);
 		}
 	}
-	release_coremap_lock(lock);
 	if(retry == 1)
 	{
-		//int spl = splhigh();
+		int spl = splhigh();
 		current_index = 0;
 		size_t start = current_index;
 		for(size_t i = start; i<page_count; i++)
@@ -198,12 +197,13 @@ get_a_dirty_page_index(int retry)
 				pt->table[pt_index] |= PTE_SWAPPING;
 				// DEBUG(DB_SWAP, "%d\n",pt->table[pt_index]);
 				//////////////////////////////////
-				//splx(spl);
+				splx(spl);
 				struct thread *thread = curthread;
 				(void)thread;
 				// DEBUG(DB_SWAP, "DPI: %d%d\n",i,core_map[i].state);
 				// KASSERT(spinlock_do_i_hold(&stealmem_lock));
 				KASSERT(core_map[i].state == SWAPPINGOUT);
+				release_coremap_lock(lock);
 				return i;
 			}
 		}
