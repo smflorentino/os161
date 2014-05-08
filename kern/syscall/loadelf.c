@@ -169,6 +169,7 @@ dynamic_load_segment(struct vnode *v, off_t offset, vaddr_t vaddr,
 		size_t amt_to_copy = PAGE_SIZE - (vaddr & SUB_FRAME);
 		//Copy the rest	
 		result = load_segment(v,offset,vaddr,amt_to_copy,amt_to_copy,is_executable);
+		KASSERT(page->state == LOCKED);
 		page->state = DIRTY;
 		if(result) { return result; }
 		/* Copy the second part of the page */
@@ -183,7 +184,9 @@ dynamic_load_segment(struct vnode *v, off_t offset, vaddr_t vaddr,
 	}
 	else
 	{
+		bool lock = get_coremap_lock();
 		struct page *page = page_alloc(curthread->t_addrspace,vaddr & PAGE_FRAME,permissions);
+		release_coremap_lock(lock);
 		result = load_segment(v,offset,vaddr,memsize,filesize,is_executable);
 		KASSERT(page->state == LOCKED);
 		page->state = DIRTY;

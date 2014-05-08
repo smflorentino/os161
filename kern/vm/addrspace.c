@@ -329,7 +329,7 @@ as_complete_load(struct addrspace *as)
 {
 	//Enable permissions.
 	as->use_permissions = true;
-	unlock_loading_pages(as);
+	// unlock_loading_pages(as);
 	DEBUG(DB_VM, "Load complete.\n");
 	//Clear the TLB
 	as_activate(as);
@@ -354,7 +354,9 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	//Set permissions
 	int permissions = PF_RWX; //change?
 	//Allocate the page
+	bool lock = get_coremap_lock();
 	struct page *page = page_alloc(as,as->stack,permissions);
+	release_coremap_lock(lock);
 	(void) page;
 	DEBUG(DB_VM,"Heap Start before aligning: %p\n", (void*) as->heap_end);
 	//Align the heap on a page boundary:

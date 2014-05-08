@@ -141,17 +141,13 @@ get_a_dirty_page_index(int retry)
 	size_t start = current_index;
 	for(size_t i = start; i<page_count; i++)
 	{
-		// KASSERT(spinlock_do_i_hold(&stealmem_lock));
-		// DEBUG(DB_SWAP,"DPI: %d\n", i);
-		if(retry)
-		{
-			// DEBUG(DB_SWAP,"I: %d State: %d\n",i,core_map[i].state);
-		}
 		int spl = splhigh();
 		if(core_map[i].state == DIRTY)
 		{
 			KASSERT(core_map[i].state == DIRTY);
+			KASSERT(core_map[i].state != SWAPPINGOUT);
 			current_index = i+1;
+			KASSERT(core_map[i].state != SWAPPINGOUT);
 			core_map[i].state = SWAPPINGOUT;
 			//Update PTE to state PTE_SWAPPING
 			struct page_table *pt = pgdir_walk(core_map[i].as,core_map[i].va,false);
@@ -187,6 +183,7 @@ get_a_dirty_page_index(int retry)
 			{
 				KASSERT(core_map[i].state == DIRTY);
 				current_index = i+1;
+				KASSERT(core_map[i].state != SWAPPINGOUT);
 				core_map[i].state = SWAPPINGOUT;
 				//Update PTE to state PTE_SWAPPING
 				struct page_table *pt = pgdir_walk(core_map[i].as,core_map[i].va,false);
@@ -389,12 +386,14 @@ make_pages_available(int npages, bool retry)
 	for (int i = 0; i < (int)page_count; i++) {
 		int spl = splhigh();
 		if(core_map[i].state == DIRTY) {
+			KASSERT(core_map[i].state != SWAPPINGOUT);
 			core_map[i].state = SWAPPINGOUT;
-			splx(spl);
 			//Update PTE to state PTE_SWAPPING
 			struct page_table *pt = pgdir_walk(core_map[i].as,core_map[i].va,false);
 			int pt_index = VA_TO_PT_INDEX(core_map[i].va);
 			pt->table[pt_index] |= PTE_SWAPPING;
+			splx(spl);
+			// KASSERT(core_map[i].state != SWAPPINGOUT);
 			swapout_page(&core_map[i]);
 			evict_page(&core_map[i]);	
 		}
@@ -627,8 +626,8 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	// What does it mean for the page to be NULL in this case?
 	if(page != NULL)
 	{
-		// DEBUG(DB_SWAP, "Page State: %p\n", page->state);
-		// KASSERT(page->state != SWAPPINGOUT);
+		// DEBUG(DB_SWAP, "Page : %p\n", &page);
+		KASSERT(page->state != SWAPPINGOUT);
 		page->state = DIRTY;
 	}
 

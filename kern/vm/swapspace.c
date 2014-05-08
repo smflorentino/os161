@@ -264,7 +264,7 @@ int swapout_page(struct page* page)
 	// Shootdown the TLB for all CPU's
 	struct tlbshootdown tlb;
 	tlb.ts_vaddr = page->va;
-	//ipi_tlbshootdown_broadcast(&tlb);
+	ipi_tlbshootdown_broadcast(&tlb);
 	//KASSERT(coremap_lock_do_i_hold());
 	// DEBUG(DB_SWAP,"O%p", page);
 	KASSERT(page->state == SWAPPINGOUT);
@@ -436,7 +436,6 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 
 	// swap in the page
 	read_page(swap_index, page->pa);
-
 	// release coremap lock
 	// sleep until swap in completes
 	// lock coremap
