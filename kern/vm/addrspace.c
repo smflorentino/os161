@@ -107,9 +107,9 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 				{
 					//bool lock = get_coremap_lock();
 					struct page *oldpage = get_page(i,pti,oldpt);
-					//int spl = splhigh();
+					int spl = splhigh();
 					oldpage->state = LOCKED;
-					//splx(spl);
+					splx(spl);
 					//Get page permissions
 					int permissions = PTE_TO_PERMISSIONS(*pt_entry);
 					//Locate the old page (swap if in, if needed)
@@ -119,10 +119,10 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 					vaddr_t old_page_va = PADDR_TO_KVADDR(oldpage->pa);
 					//Copy the data:
 					memcpy((void*) new_page_va, (void*) old_page_va,PAGE_SIZE);
-					//spl=splhigh();
+					spl=splhigh();
 					oldpage->state = DIRTY;
 					newpage->state = DIRTY;
-					//splx(spl);
+					splx(spl);
 					//release_coremap_lock(lock);
 				}
 				else //No page at Page Table entry 'pte'
@@ -198,10 +198,6 @@ as_destroy(struct addrspace *as)
 						free_kpages(page_location);
 					}
 				}
-<<<<<<< HEAD
-=======
-				//kprintf("i%d\n",i);
->>>>>>> 5d9d1489627dfd8acac81a8bb791ebbabf448624
 			}
 			// DEBUG(DB_SWAP,"PT:%d\n",i);
 			//Now, delete the page table. //TODO create a destory method??

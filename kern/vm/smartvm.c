@@ -135,11 +135,10 @@ size_t
 get_a_dirty_page_index(int retry)
 {
 
-	// bool lock = get_coremap_lock();
+	bool lock = get_coremap_lock();
 	// KASSERT(spinlock_do_i_hold(&stealmem_lock));
 	// DEBUG(DB_SWAP, "Cur:%d\n",current_index);
 	size_t start = current_index;
-	//int spl = splhigh();
 	for(size_t i = start; i<page_count; i++)
 	{
 		// KASSERT(spinlock_do_i_hold(&stealmem_lock));
@@ -148,6 +147,7 @@ get_a_dirty_page_index(int retry)
 		{
 			// DEBUG(DB_SWAP,"I: %d State: %d\n",i,core_map[i].state);
 		}
+		int spl = splhigh();
 		if(core_map[i].state == DIRTY)
 		{
 			KASSERT(core_map[i].state == DIRTY);
@@ -159,16 +159,21 @@ get_a_dirty_page_index(int retry)
 			pt->table[pt_index] |= PTE_SWAPPING;
 			// DEBUG(DB_SWAP, "%d\n",pt->table[pt_index]);
 			//////////////////////////////////
-			//splx(spl);
+			splx(spl);
 			struct thread *thread = curthread;
 			(void)thread;
 			// DEBUG(DB_SWAP, "DPI: %d%d\n",i,core_map[i].state);
 			// KASSERT(spinlock_do_i_hold(&stealmem_lock));
 			KASSERT(core_map[i].state == SWAPPINGOUT);
+			release_coremap_lock(lock);
 			return i;
 		}
+		else
+		{
+			splx(spl);
+		}
 	}
-	//splx(spl);
+	release_coremap_lock(lock);
 	if(retry == 1)
 	{
 		//int spl = splhigh();
@@ -381,14 +386,20 @@ make_pages_available(int npages, bool retry)
 	lock = get_coremap_lock();
 
 	for (int i = 0; i < (int)page_count; i++) {
+		int spl = splhigh();
 		if(core_map[i].state == DIRTY) {
 			core_map[i].state = SWAPPINGOUT;
+			splx(spl);
 			//Update PTE to state PTE_SWAPPING
 			struct page_table *pt = pgdir_walk(core_map[i].as,core_map[i].va,false);
 			int pt_index = VA_TO_PT_INDEX(core_map[i].va);
 			pt->table[pt_index] |= PTE_SWAPPING;
 			swapout_page(&core_map[i]);
 			evict_page(&core_map[i]);	
+		}
+		else
+		{
+			splx(spl);
 		}
 	}
 

@@ -267,6 +267,10 @@ int swapout_page(struct page* page)
 	// ipi_tlbshootdown_broadcast(&tlb);
 	//KASSERT(coremap_lock_do_i_hold());
 	// DEBUG(DB_SWAP,"O%p", page);
+	if(page->state != SWAPPINGOUT)
+	{
+		kprintf("Page State:%d\n", page->state);
+	}
 	KASSERT(page->state == SWAPPINGOUT);
 	// DEBUG(DB_SWAP,"Swapping PAGE %p\n", page);
 	int result = 0;
@@ -356,6 +360,10 @@ int swapout_page(struct page* page)
 
 	// mark page as CLEAN; does not need a lock because the SWAPPING_OUT status 
 	// protects the state of the page at this point
+	if(page->state != SWAPPINGOUT)
+	{
+		kprintf("Page State:%d\n", page->state);
+	}
 	KASSERT(page->state == SWAPPINGOUT);
 	page->state = CLEAN;
 	KASSERT(page->as != NULL);
