@@ -173,15 +173,19 @@ dynamic_load_segment(struct vnode *v, off_t offset, vaddr_t vaddr,
 		if(result) { return result; }
 		/* Copy the second part of the page */
 		vaddr_t spillover_va = ((vaddr & PAGE_FRAME) + PAGE_SIZE);
+		bool lock = get_coremap_lock();
 		page = page_alloc(curthread->t_addrspace, spillover_va,permissions);
+		release_coremap_lock(lock);
 		result = load_segment(v,offset + amt_to_copy, vaddr, memsize - amt_to_copy, filesize - amt_to_copy,is_executable);
 		if(result) { return result;}
+		KASSERT(page->state == LOCKED);
 		page->state = DIRTY;
 	}
 	else
 	{
 		struct page *page = page_alloc(curthread->t_addrspace,vaddr & PAGE_FRAME,permissions);
 		result = load_segment(v,offset,vaddr,memsize,filesize,is_executable);
+		KASSERT(page->state == LOCKED);
 		page->state = DIRTY;
 		return result;
 	}
@@ -396,9 +400,12 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 			{
 				DEBUG(DB_DEMAND,"Mem Size:%d\n",memsize);
 				DEBUG(DB_DEMAND,"VA: %p\n",(void*) va);
+				bool lock = get_coremap_lock();
 				struct page *page = page_alloc(as,va & PAGE_FRAME,permissions);
+				release_coremap_lock(lock);
 				va += PAGE_SIZE;
 				memsize -= PAGE_SIZE;
+				KASSERT(page->state == LOCKED);
 				page->state = DIRTY;
 				blank_pages++;
 			}

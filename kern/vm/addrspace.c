@@ -105,11 +105,12 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 				//Page Table Entry exists
 				if(*pt_entry != 0x0)
 				{
-					//bool lock = get_coremap_lock();
-					struct page *oldpage = get_page(i,pti,oldpt);
+					bool lock = get_coremap_lock();
 					int spl = splhigh();
+					struct page *oldpage = get_page(i,pti,oldpt);
 					oldpage->state = LOCKED;
 					splx(spl);
+					release_coremap_lock(lock);
 					//Get page permissions
 					int permissions = PTE_TO_PERMISSIONS(*pt_entry);
 					//Locate the old page (swap if in, if needed)

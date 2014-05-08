@@ -166,6 +166,7 @@ get_a_dirty_page_index(int retry)
 			// KASSERT(spinlock_do_i_hold(&stealmem_lock));
 			KASSERT(core_map[i].state == SWAPPINGOUT);
 			release_coremap_lock(lock);
+			KASSERT(core_map[i].state == SWAPPINGOUT);
 			return i;
 		}
 		else
@@ -175,17 +176,13 @@ get_a_dirty_page_index(int retry)
 	}
 	if(retry == 1)
 	{
-		int spl = splhigh();
 		current_index = 0;
 		size_t start = current_index;
 		for(size_t i = start; i<page_count; i++)
 		{
 			// KASSERT(spinlock_do_i_hold(&stealmem_lock));
 			// DEBUG(DB_SWAP,"DPI: %d\n", i);
-			if(retry)
-			{
-				// DEBUG(DB_SWAP,"I: %d State: %d\n",i,core_map[i].state);
-			}
+			int spl = splhigh();
 			if(core_map[i].state == DIRTY)
 			{
 				KASSERT(core_map[i].state == DIRTY);
@@ -588,7 +585,6 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		//Does this work?
 		// DEBUG(DB_SWAP,"PTE (vmfault)1:%p\n",(void*) pt->table[pt_index]);
 		lock = get_coremap_lock();
-
 		page = page_alloc(as,faultaddress,permissions);
 		/* Page now has a home in RAM. But set the swap bit to 1 so we can swap the page in*/
 		pt->table[pt_index] |= PTE_SWAP;
@@ -631,7 +627,8 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	// What does it mean for the page to be NULL in this case?
 	if(page != NULL)
 	{
-		DEBUG(DB_VM, "Page State: %d\n", page->state);
+		// DEBUG(DB_SWAP, "Page State: %p\n", page->state);
+		// KASSERT(page->state != SWAPPINGOUT);
 		page->state = DIRTY;
 	}
 
@@ -921,6 +918,7 @@ page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 	// Loop through the coremap 7 times, trying to find a free page.
 	int j = 0;
 	while(j < 7){
+		bool lock = get_coremap_lock();
 		for(size_t i = 0;i<page_count;i++)
 		{
 			//int spl = splhigh();
@@ -941,10 +939,11 @@ page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 				core_map[i].npages = 1;
 				//release_coremap_lock(lock);
 				//splx(spl);
+				release_coremap_lock(lock);
 				return &core_map[i];
 			}
 		}
-
+		release_coremap_lock(lock);
 		#ifdef SWAPPING_ENABLED
 		//Make a page available for allocation, if needed.
 		make_page_available();

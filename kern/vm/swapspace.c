@@ -271,7 +271,7 @@ int swapout_page(struct page* page)
 	// DEBUG(DB_SWAP,"Swapping PAGE %p\n", page);
 	int result = 0;
 	int swap_index;
-	//bool lock2 = get_swap_lock();
+	bool lock2 = get_swap_lock();
 	KASSERT(page->as != NULL);
 
 	// Update the Page Table to list the page as swapped
@@ -309,7 +309,7 @@ int swapout_page(struct page* page)
 	swap_index = -1;	// -1 is an invalid index
 	for (int i=0; i < SWAP_MAX; i++) {
 		if (swap_table[i].as == page->as && swap_table[i].va == page->va) {
-			swap_index = i;
+			swap_index = i;	
 			break;
 		}
 	}
@@ -329,7 +329,6 @@ int swapout_page(struct page* page)
 	if (swap_index < 0) {
 		panic("Out of disk space!!!");
 	}
-	//release_swap_lock(lock2);
 	// Write zeros to swap?
 
 	// Lock the swap_table lock, since it's shared
@@ -338,7 +337,12 @@ int swapout_page(struct page* page)
 	// Update swap table so we can find this page later
 	swap_table[swap_index].as = page->as;
 	swap_table[swap_index].va = page->va;
-
+	if(page->state != SWAPPINGOUT)
+	{
+		kprintf("Page State: %d", page->state);
+	}
+	KASSERT(page->state == SWAPPINGOUT);
+	release_swap_lock(lock2);
 	//Swap table updated, so we can release the lock
 	//release_swap_lock(sw_lock);
 	//release_swap_spinlock(sw_lock);
