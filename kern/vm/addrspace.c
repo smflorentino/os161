@@ -58,6 +58,8 @@ as_create(void)
 	if (as == NULL) {
 		return NULL;
 	}
+	as->static_start = 0x0;
+
 
 	//Use permissions (for now...)
 	as->use_permissions = true;
@@ -182,7 +184,6 @@ as_destroy(struct addrspace *as)
 						free_kpages(page_location);
 					}
 				}
-				kprintf("i%d\n",i);
 			}
 			// DEBUG(DB_SWAP,"PT:%d\n",i);
 			//Now, delete the page table. //TODO create a destory method??
@@ -227,6 +228,11 @@ int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		 int readable, int writeable, int executable)
 {
+	//Set the start of the static region
+	if(as->static_start == 0x0)
+	{
+		as->static_start = vaddr & PAGE_FRAME;
+	}
 	DEBUG(DB_VM, "Seg Start: %p\n", (void*) vaddr);
 	DEBUG(DB_VM, "Size: %p\n", (void*) sz);
 	//Calculate the number of pages that we need
@@ -275,10 +281,10 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	{
 		DEBUG(DB_VM, "CURVA:%p\n", (void*) cur_vaddr);
 		int permissions = readable | writeable | executable;
-		struct page *page = page_alloc(as,cur_vaddr,permissions);
+		// struct page *page = page_alloc(as,cur_vaddr,permissions);
+		page_prealloc(as,cur_vaddr,permissions);
 		cur_vaddr += PAGE_SIZE;
-		(void)page;
-		page->state = LOADING;
+		// page->state = LOADING;
 	}
 
 	return 0;

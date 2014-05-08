@@ -793,7 +793,7 @@ clean_swapfile(struct addrspace* as, vaddr_t va)
 	}
 
 	// All we do is make the swap entry null, same as in swapspace_init(). 
-	kprintf("Cleaning a swap page.\n");
+	// kprintf("Cleaning a swap page.\n");
 	swap_table[swap_index].as = NULL;
 
 	release_swap_lock(lock2);

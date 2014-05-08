@@ -106,6 +106,9 @@ struct addrspace {
         /* User Stack */
         vaddr_t stack;
 
+        /* Static Segment Start */
+        vaddr_t static_start;
+
         /* Whether to ignore permissions or not. When we are loading segments into memory,
          * we need to ignore permissions (since we need to load data into read-only segements)
          */

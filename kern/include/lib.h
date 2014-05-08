@@ -94,6 +94,7 @@
 #define DB_PROCESS	   0x4000
 
 #define DB_SWAP        0x8000
+#define DB_DEMAND      0x10000
 
 extern uint32_t dbflags;
 

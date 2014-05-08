@@ -9,7 +9,7 @@
 #include <vnode.h>
 #include <addrspace.h>
 
-#define SWAP_MAX 1000//2048	// Maximum number of pages that can be swapped to disk
+#define SWAP_MAX 8192//2048	// Maximum number of pages that can be swapped to disk
 
 #define SIND_TO_DISK(swap_index) ( (swap_index * PAGE_SIZE) )
 

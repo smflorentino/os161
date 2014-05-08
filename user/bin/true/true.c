@@ -35,17 +35,49 @@
 /*
  * true - succeed.
  */
+#define SIZE 1024 * 114 * 2
+
+static void sort()
+{
+    static int tmp[SIZE];
+    for(int i = 0;i< SIZE;i++)
+    {
+        tmp[i] = i;
+        // printf("VA:%p\n",&tmp[i]);
+    }
+    for(int i = 0;i<SIZE;i++)
+    {
+        int index = 1024 - i < 0 ? 2 : 1024-i;
+        // printf("i:%d Index: %d\n",i,index);
+        // printf("VA: %p\n",&tmp[i]);
+        tmp[index] = i;
+    }
+}
 
 int
 main(int argc, char* argv[])
 {
-	(void)argc;
-	(void)argv;
-	printf("Main");
-	for(int i =0;i<3000;i++)
-	{
-		printf("I:%d\n",i);
-		malloc(1024);
-	}
+    sort();
+    (void)argc;
+    (void)argv;
 	exit(0);
 }
+
+
+// static int A[SIZE];
+
+// static
+// void
+// initarray(void)
+// {
+//     int i;
+
+    
+//      * Initialize the array, with pseudo-random but deterministic contents.
+     
+//     srandom(533);
+
+//     for (i = 0; i < SIZE; i++) {        
+//         A[i] = random();
+//     }
+// }

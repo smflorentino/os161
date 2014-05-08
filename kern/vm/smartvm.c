@@ -450,6 +450,13 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 		{
 			page = page_alloc(as,faultaddress, PF_RW);
 		}
+		//Static Segment(s)
+		else if(faultaddress < as->heap_start && faultaddress >= as->static_start)
+		{
+			panic("code not loaded: %p",(void*) faultaddress);
+			//TODO
+			// page = page_alloc(as,faultaddress,PF_)
+		}
 		else
 		{
 			//splx(spl);
@@ -490,6 +497,13 @@ int vm_fault(int faulttype, vaddr_t faultaddress)
 	//Page is writable if permissions say so or if we're ignoring permissions.
 	bool writable = (permissions & PF_W) || !(as->use_permissions);
 	//This time, it shouldn't be 0.
+	//Static Segment(s)
+	// if(faultaddress < as->heap_start && faultaddress >= as->static_start)
+	// {
+	// 	panic("code not loaded: %p",(void*) faultaddress);
+	// 	//TODO
+	// 	// page = page_alloc(as,faultaddress,PF_)
+	// }
 	KASSERT(pfn > 0);
 	KASSERT(pfn <= PAGE_SIZE * (int) page_count);
 
@@ -709,12 +723,24 @@ allocate_nonfixed_page(size_t page_num, struct addrspace *as, vaddr_t va, int pe
 	// DEBUG(DB_VM, "PTE:%p\n", (void*) pt->table[pt_index]);
 	// DEBUG(DB_VM, "PFN:%p\n", (void*) PTE_TO_PFN(pt->table[pt_index]));
 	//Add in permissions
-	(void)permissions;
 	pt->table[pt_index] |= permissions;
 
 	zero_page(page_num);
 	free_pages--;
 	// DEBUG(DB_VM, "A:%d\n",free_pages);
+}
+
+/* Pre-Allocate a Page in User Address Space. Simply Set Permissions*/
+static
+void
+pre_allocate_nonfixed_page(struct addrspace *as,vaddr_t va,int permissions)
+{
+	//Get the page table in the page directory (create one, if needed)
+	struct page_table *pt = pgdir_walk(as,va,true);
+	//Get the index into the page table
+	size_t pt_index = VA_TO_PT_INDEX(va);
+	//Set the permissions (used later when we actually allocate)
+	pt->table[pt_index] |= permissions;
 }
 
 /* Called by free_kpages */
@@ -723,11 +749,12 @@ void
 free_fixed_page(size_t page_num)
 {
 	// KASSERT(lock_do_i_hold(core_map_lock));
-	free_pages++;
-	core_map[page_num].state = FREE;
 	core_map[page_num].va = 0x0;
 	core_map[page_num].as =  NULL;
 	core_map[page_num].npages = 0;
+	core_map[page_num].state = FREE;
+	free_pages++;
+
 	// DEBUG(DB_VM, "FR:%d\n",free_pages);
 	// if(core_map[page_num].as != NULL)
 	// {
@@ -781,6 +808,15 @@ page_alloc(struct addrspace* as, vaddr_t va, int permissions)
 	panic("No available pages for single page alloc!");
 	return 0x0;
 }
+
+/* Pre-Allocate page in user address space*/
+void
+page_prealloc(struct addrspace *as, vaddr_t va, int permissions)
+{
+	pre_allocate_nonfixed_page(as,va,permissions);
+}
+
+
 
 
 /* Called by alloc_kpages */
@@ -869,7 +905,7 @@ void free_kpages(vaddr_t addr)
 		panic("Tried to free a direct-mapped address\n");	
 	}
 	
-	bool lock = get_coremap_lock();
+	// bool lock = get_coremap_lock();
 
 	// kprintf("Freeing VA:%p\n", (void*) addr);
 	KASSERT(page_count > 0);
@@ -885,7 +921,7 @@ void free_kpages(vaddr_t addr)
 				// DEBUG(DB_SWAP, "FREE %p\n",&core_map[j]);
 				free_fixed_page(j);
 			}
-			release_coremap_lock(lock);
+			// release_coremap_lock(lock);
 			return;
 		}
 	}

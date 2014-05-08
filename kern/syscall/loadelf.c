@@ -72,7 +72,7 @@
  * Note that uiomove will catch it if someone tries to load an
  * executable whose load address is in kernel space. If you should
  * change this code to not use uiomove, be sure to check for this case
- * explicitly.
+ * explicitly
  */
 static
 int
@@ -89,7 +89,7 @@ load_segment(struct vnode *v, off_t offset, vaddr_t vaddr,
 		filesize = memsize;
 	}
 
-	DEBUG(DB_EXEC, "ELF: Loading %lu bytes to 0x%lx\n", 
+	DEBUG(DB_DEMAND, "ELF: Loading %lu bytes to 0x%lx\n", 
 	      (unsigned long) filesize, (unsigned long) vaddr);
 
 	iov.iov_ubase = (userptr_t)vaddr;
@@ -144,6 +144,50 @@ load_segment(struct vnode *v, off_t offset, vaddr_t vaddr,
 	return result;
 }
 
+/* Load a Segment Dynamically */
+static
+int
+dynamic_load_segment(struct vnode *v, off_t offset, vaddr_t vaddr, 
+	     size_t memsize, size_t filesize,
+	     int is_executable, int permissions)
+{
+	/*If we split between two pages, add another page:
+	 * For example, if vaddr = 0x444970, and size = 192,
+	 * we need from 0x444970 to 0x445162. So we need
+	 * 0x44000 AND 0x445000 -- TWO PAGES. Simply aligning 
+	 * to a page boundary will get is 0x44000, but not the 
+	 * 162 bytes that spill into the next page. So we need to
+	 * account for that now:
+	 */
+	int result;
+	if(((vaddr & SUB_FRAME) + filesize > PAGE_SIZE))
+	{
+		DEBUG(DB_DEMAND, "Spillover Detected\n");
+		/*Copy the first part of the page*/
+		struct page *page = page_alloc(curthread->t_addrspace, vaddr & PAGE_FRAME,permissions);
+		//Get amount to copy
+		size_t amt_to_copy = PAGE_SIZE - (vaddr & SUB_FRAME);
+		//Copy the rest	
+		result = load_segment(v,offset,vaddr,amt_to_copy,amt_to_copy,is_executable);
+		page->state = DIRTY;
+		if(result) { return result; }
+		/* Copy the second part of the page */
+		vaddr_t spillover_va = ((vaddr & PAGE_FRAME) + PAGE_SIZE);
+		page = page_alloc(curthread->t_addrspace, spillover_va,permissions);
+		result = load_segment(v,offset + amt_to_copy, vaddr, memsize - amt_to_copy, filesize - amt_to_copy,is_executable);
+		if(result) { return result;}
+		page->state = DIRTY;
+	}
+	else
+	{
+		struct page *page = page_alloc(curthread->t_addrspace,vaddr & PAGE_FRAME,permissions);
+		result = load_segment(v,offset,vaddr,memsize,filesize,is_executable);
+		page->state = DIRTY;
+		return result;
+	}
+	return 0;
+}
+
 /*
  * Load an ELF executable user program into the current address space.
  *
@@ -157,6 +201,7 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 	int result, i;
 	struct iovec iov;
 	struct uio ku;
+	struct addrspace *as = curthread->t_addrspace;
 
 	/*
 	 * Read the executable header from offset 0 in the file.
@@ -212,7 +257,7 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 	 * might have a larger structure, so we must use e_phentsize
 	 * to find where the phdr starts.
 	 */
-
+	DEBUG(DB_DEMAND,"Num Of Segements:%d\n",eh.e_phnum);
 	for (i=0; i<eh.e_phnum; i++) {
 		off_t offset = eh.e_phoff + i*eh.e_phentsize;
 		uio_kinit(&iov, &ku, &ph, sizeof(ph), offset, UIO_READ);
@@ -238,7 +283,9 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 				ph.p_type);
 			return ENOEXEC;
 		}
-
+		DEBUG(DB_DEMAND, "MEM SZ:%d\n",ph.p_memsz);
+		DEBUG(DB_DEMAND, "FILE SZ:%d\n", ph.p_filesz);
+		DEBUG(DB_DEMAND, "VADDR:%p\n",(void*)ph.p_vaddr);
 		result = as_define_region(curthread->t_addrspace,
 					  ph.p_vaddr, ph.p_memsz,
 					  ph.p_flags & PF_R,
@@ -257,11 +304,10 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 	/*
 	 * Now actually load each segment.
 	 */
-
 	for (i=0; i<eh.e_phnum; i++) {
 		off_t offset = eh.e_phoff + i*eh.e_phentsize;
 		uio_kinit(&iov, &ku, &ph, sizeof(ph), offset, UIO_READ);
-
+		DEBUG(DB_DEMAND, "SEGMENT: %d\n",1);
 		result = VOP_READ(v, &ku);
 		if (result) {
 			return result;
@@ -283,10 +329,87 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 				ph.p_type);
 			return ENOEXEC;
 		}
+		struct addrspace *as = curthread->t_addrspace;
+		vaddr_t va = ph.p_vaddr;
+		DEBUG(DB_DEMAND, "Original VA: %p\n", (void*) va);
+		DEBUG(DB_DEMAND, "Max VA:%p\n", (void*) (va + ph.p_memsz));
+		// va &= PAGE_FRAME;
+		struct page_table *pt = pgdir_walk(as,va,false);
+		int pt_index = VA_TO_PT_INDEX(va);
+		int permissions = PTE_TO_PERMISSIONS(pt->table[pt_index]);
+		int small_pages = 0;
+		if(ph.p_memsz <= PAGE_SIZE)
+		{
+			DEBUG(DB_DEMAND, "Segement Total Size is < 4k\n");
+			// pt = pgdir_walk(as,va,false);
+			// pt_index = VA_TO_PT_INDEX(va);
+			// permissions = PTE_TO_PERMISSIONS(pt->table[pt_index]);
 
-		result = load_segment(v, ph.p_offset, ph.p_vaddr, 
-				      ph.p_memsz, ph.p_filesz,
-				      ph.p_flags & PF_X);
+
+			result = dynamic_load_segment(v, ph.p_offset, va, 
+				ph.p_memsz, ph.p_filesz,
+				ph.p_flags & PF_X,permissions);
+			if (result) {
+					return result;
+			}
+			// page->state = DIRTY;	
+			small_pages = 1;
+		}
+		else
+		{
+			int filesize = (int) ph.p_filesz;
+			int memsize = (int) ph.p_memsz;
+			off_t cur_offset = ph.p_offset;
+			DEBUG(DB_DEMAND, "Loading >1 Segment\n");
+			DEBUG(DB_DEMAND, "Original Parameters:\n");
+			DEBUG(DB_DEMAND, "File Size: %d\n",filesize);
+			DEBUG(DB_DEMAND, "Mem Size: %d\n", memsize);
+			DEBUG(DB_DEMAND, "Offset:%d\n", (int) cur_offset);
+			DEBUG(DB_DEMAND, "VA:%p\n", (void*) va);
+			size_t amt_to_read;
+			int pages = 0;
+			int blank_pages = 0;
+			while(filesize > 0)
+			{
+				// struct page *page = page_alloc(as,va & PAGE_FRAME,permissions);
+				DEBUG(DB_DEMAND, "loading...\n");
+				DEBUG(DB_DEMAND, "File Size: %d\n",filesize);
+				DEBUG(DB_DEMAND, "Mem Size: %d\n", memsize);
+				DEBUG(DB_DEMAND, "Offset:%d\n", (int) cur_offset);
+				DEBUG(DB_DEMAND, "VA:%p\n", (void*) va);
+				amt_to_read = (filesize - PAGE_SIZE > 0 ? PAGE_SIZE : filesize);
+				result = dynamic_load_segment(v, cur_offset, va, 
+		      		PAGE_SIZE, amt_to_read, ph.p_flags & PF_X,permissions);
+				if (result) {
+						return result;
+				}
+				filesize -= PAGE_SIZE;
+				memsize -= PAGE_SIZE;
+				va += PAGE_SIZE;
+				cur_offset += PAGE_SIZE;
+				// page->state = DIRTY;
+				pages++;
+			}
+			(void)blank_pages;
+			DEBUG(DB_DEMAND,"Empty Pages...\n");
+			while(memsize > 0)
+			{
+				DEBUG(DB_DEMAND,"Mem Size:%d\n",memsize);
+				DEBUG(DB_DEMAND,"VA: %p\n",(void*) va);
+				struct page *page = page_alloc(as,va & PAGE_FRAME,permissions);
+				va += PAGE_SIZE;
+				memsize -= PAGE_SIZE;
+				page->state = DIRTY;
+				blank_pages++;
+			}
+			DEBUG(DB_DEMAND, "Small Pages: %d\n", small_pages);
+			DEBUG(DB_DEMAND, "Pages: %d\n", pages);
+			DEBUG(DB_DEMAND, "Blank Pages: %d\n", blank_pages);
+
+		}
+		// result = load_segment(v, ph.p_offset, ph.p_vaddr, 
+		//       ph.p_memsz, ph.p_filesz,
+		//       ph.p_flags & PF_X);
 		if (result) {
 			return result;
 		}
@@ -300,7 +423,6 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 	*entrypoint = eh.e_entry;
 
 	/* Register load complete in addrspace */
-	struct addrspace *as = curthread->t_addrspace;
 	as->loadelf_done = true;
 	DEBUG(DB_VM,"LoadELFDone\n");
 	// kprintf("LoadELF done\n");
