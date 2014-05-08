@@ -382,6 +382,10 @@ make_pages_available(int npages, bool retry)
 	(void)retry;
 	// Since we probably need a lot of pages, due to forking and such,
 	// why not just flush all of memory?
+	if(free_pages > 10)
+	{
+		return;
+	}
 	bool lock; 
 	lock = get_coremap_lock();
 
@@ -988,7 +992,7 @@ page_nalloc(int npages)
 	make_pages_available(npages,false);
 	#endif
 
-	//int spl = splhigh();
+	int spl = splhigh();
 	for(size_t i = 0;i<page_count;i++)
 	{
 		if(!blockStarted && core_map[i].state == FREE)
@@ -1017,7 +1021,7 @@ page_nalloc(int npages)
 			}
 			core_map[startingPage].npages = npages;
 			release_coremap_lock(lock);
-			//splx(spl);
+			splx(spl);
 			return PADDR_TO_KVADDR(core_map[startingPage].pa);
 		}
 	}

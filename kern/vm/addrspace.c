@@ -149,8 +149,8 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 void
 as_destroy(struct addrspace *as)
 {
-	bool lock;
-	lock = get_coremap_lock();
+	// bool lock;
+	// lock = get_coremap_lock();
 
 	//Go through each entry in the page directory.
 	for(size_t i = 0;i<PAGE_DIR_ENTRIES;i++)
@@ -204,7 +204,7 @@ as_destroy(struct addrspace *as)
 			kfree(pt);
 		}
 	}
-	release_coremap_lock(lock);
+	// release_coremap_lock(lock);
 	//Now, delete the address space.
 	kfree(as);
 }

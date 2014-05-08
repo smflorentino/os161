@@ -267,10 +267,6 @@ int swapout_page(struct page* page)
 	// ipi_tlbshootdown_broadcast(&tlb);
 	//KASSERT(coremap_lock_do_i_hold());
 	// DEBUG(DB_SWAP,"O%p", page);
-	if(page->state != SWAPPINGOUT)
-	{
-		kprintf("Page State:%d\n", page->state);
-	}
 	KASSERT(page->state == SWAPPINGOUT);
 	// DEBUG(DB_SWAP,"Swapping PAGE %p\n", page);
 	int result = 0;
@@ -288,7 +284,7 @@ int swapout_page(struct page* page)
 	// DEBUG(DB_SWAP, "PTE:%p\n",(void*) *pte);
 	KASSERT(PTE_TO_LOCATION(*pte) == PTE_SWAPPING); //Check we're evicting from memory
 	// DEBUG(DB_SWAP, "Swapping out VA:%p at Page: %d\n", (void*) page->va, page->pa / PAGE_SIZE);
-
+	release_coremap_lock(lock);
 	// check coremap lock do i have?
 	//lock coremap
 	//bool holdlock = lock_do_i_hold(core_map_lock);
@@ -333,7 +329,7 @@ int swapout_page(struct page* page)
 	if (swap_index < 0) {
 		panic("Out of disk space!!!");
 	}
-
+	release_swap_lock(lock2);
 	// Write zeros to swap?
 
 	// Lock the swap_table lock, since it's shared
@@ -360,18 +356,14 @@ int swapout_page(struct page* page)
 
 	// mark page as CLEAN; does not need a lock because the SWAPPING_OUT status 
 	// protects the state of the page at this point
-	if(page->state != SWAPPINGOUT)
-	{
-		kprintf("Page State:%d\n", page->state);
-	}
 	KASSERT(page->state == SWAPPINGOUT);
 	page->state = CLEAN;
 	KASSERT(page->as != NULL);
 	KASSERT(page->state == CLEAN);
 	// KASSERT(coremap_lock_do_i_hold());
 	// release coremap lock
-	release_swap_lock(lock2);
-	release_coremap_lock(lock);
+
+	// release_coremap_lock(lock);
 	return result;
 }
 
@@ -389,8 +381,7 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 	(void)result;
 	int swap_index;
 
-	// check coremap do i have?
-	bool lock = get_coremap_lock();
+	// check coremap do i have
 	bool lock2 = get_swap_lock();
 
 	// double check that page exists
@@ -424,7 +415,7 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 	if(swap_index < 0) {
 		panic("Tried to swap in a non-existant page.");
 	}
-
+	release_swap_lock(lock2);
 
 
 		// (below will be job of swapping algorithm)
@@ -448,16 +439,16 @@ int swapin_page(struct addrspace* as, vaddr_t va, struct page* page)
 
 	// mark page as DIRTY
 	KASSERT(page->state == LOCKED);
-	//int spl = splhigh();
-	// page->state = DIRTY;
+	bool lock = get_coremap_lock();
+	int spl = splhigh();
+	page->state = DIRTY;
 	page->va = va;
 	// mark page as in memory TODO macro
 	pt->table[pt_index] = PTE_IN_MEM(pt->table[pt_index]);
-	//splx(spl);
+	splx(spl);
 	// KASSERT(page->state == DIRTY);
 	KASSERT(PTE_TO_LOCATION(pt->table[pt_index]) == PTE_PM);
 	//release coremap lock
-	release_swap_lock(lock2);
 	release_coremap_lock(lock);
 	// KASSERT(coremap_lock_do_i_hold());
 	return result;
